@@ -60,8 +60,6 @@ BOARD_USE_SOFT_GATEKEEPER := true
 # dex2oat
 WITH_DEXPREOPT := true
 WITH_DEXPREOPT_PIC := true
-PRODUCT_DEX_PREOPT_BOOT_FLAGS := --compiler-filter=speed-profile
-PRODUCT_DEX_PREOPT_DEFAULT_FLAGS := --compiler-filter=speed
 USE_DEX2OAT_DEBUG := false
 
 # Architecture
