@@ -93,6 +93,42 @@ jobs:
         run: |
           repo forall -v -c git lfs pull
 
+      - name: Patch Java version detection in build/core/main.mk
+        working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+        run: |
+          python3 - << 'PYEOF'
+          path = "build/core/main.mk"
+          with open(path, "r") as f:
+              content = f.read()
+
+          old_17 = r"""java_version := $(shell echo '$(java_version_str)' | grep '^java .*[ "]1\.7[\. "$$]')"""
+          new_17 = r"""java_version := $(shell echo '$(java_version_str)' | grep -i '[ "]1\.7[\. "$$]')"""
+          old_16 = r"""java_version := $(shell echo '$(java_version_str)' | grep '^java .*[ "]1\.6[\. "$$]')"""
+          new_16 = r"""java_version := $(shell echo '$(java_version_str)' | grep -i '[ "]1\.6[\. "$$]')"""
+
+          if old_17 not in content:
+              raise SystemExit(
+                  "ERROR: expected java_version (1.7) pattern not found in "
+                  + path
+                  + " - upstream main.mk may have changed, refusing to patch blindly"
+              )
+          if old_16 not in content:
+              raise SystemExit(
+                  "ERROR: expected java_version (1.6) pattern not found in "
+                  + path
+                  + " - upstream main.mk may have changed, refusing to patch blindly"
+              )
+
+          content = content.replace(old_17, new_17)
+          content = content.replace(old_16, new_16)
+
+          with open(path, "w") as f:
+              f.write(content)
+
+          print("Patched java_version detection (removed '^java' Oracle-only prefix requirement) in " + path)
+          PYEOF
+          grep -n "java_version :=" build/core/main.mk
+
       - name: Set Swap Space
         uses: pierotofy/set-swap-space@master
         with:
