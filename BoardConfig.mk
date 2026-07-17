@@ -34,7 +34,7 @@ MALLOC_SVELTE := true
 
 
 BOARD_WLAN_VENDOR := MRVL
-WIFI_DRIVER_MODULE_PATH := "/system/lib/modules/sd8801.ko"
+WIFI_DRIVER_MODULE_PATH := "/lib/modules/sd8801.ko"
 WIFI_DRIVER_MODULE_NAME	:= "sd8801"
 WIFI_DRIVER_MODULE_ARG := "firmware_path=/system/etc/firmware/mrvl/sd8801_uapsta.bin cfg80211_wext=12 sta_name=wlan uap_name=wlan wfd_name=p2p fw_name=mrvl/sd8801_uapsta.bin"
 WIFI_DRIVER_FW_PATH_PARAM := "/sys/module/sd8801/parameters/firmware_path"
