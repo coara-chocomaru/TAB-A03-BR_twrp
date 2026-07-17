@@ -32,8 +32,9 @@ BOARD_SUPPORTS_SOUND_TRIGGER := false
 WITHOUT_CHECK_API := true
 MALLOC_SVELTE := true
 
+
 BOARD_WLAN_VENDOR := MRVL
-WIFI_DRIVER_MODULE_PATH := "/lib/modules/sd8801.ko"
+WIFI_DRIVER_MODULE_PATH := "/system/lib/modules/sd8801.ko"
 WIFI_DRIVER_MODULE_NAME	:= "sd8801"
 WIFI_DRIVER_MODULE_ARG := "firmware_path=/system/etc/firmware/mrvl/sd8801_uapsta.bin cfg80211_wext=12 sta_name=wlan uap_name=wlan wfd_name=p2p fw_name=mrvl/sd8801_uapsta.bin"
 WIFI_DRIVER_FW_PATH_PARAM := "/sys/module/sd8801/parameters/firmware_path"
@@ -41,7 +42,7 @@ WIFI_DRIVER_FW_PATH_STA := "/system/etc/firmware/mrvl/sd8801_uapsta.bin"
 WIFI_DRIVER_FW_PATH_AP := "/system/etc/firmware/mrvl/sd8801_uapsta.bin"
 WIFI_DRIVER_FW_PATH_P2P := "/system/etc/firmware/mrvl/sd8801_uapsta.bin"
 WIFI_SDIO_IF_DRIVER_MODULE_PATH := "/lib/modules/mlan8801.ko"
-WIFI_SDIO_IF_DRIVER_MODULE_NAME := "mlan"
+WIFI_SDIO_IF_DRIVER_MODULE_NAME := "mlan8801"
 WIFI_SDIO_IF_DRIVER_MODULE_ARG := ""
 MRVL_WIRELESS_DAEMON_API := true
 
