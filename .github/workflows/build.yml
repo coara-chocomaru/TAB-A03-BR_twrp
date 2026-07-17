@@ -204,6 +204,48 @@ jobs:
           echo "timestamps:"
           ls -la "${DEX2OAT_BIN}" "${DEX2OAT_REAL}"
                   
+      - name: Pre-generate Blink CSSGrammar/XPathGrammar sources serially (avoid rule_bison.py race)
+        working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+        run: |
+          source build/envsetup.sh
+          export ALLOW_MISSING_DEPENDENCIES=true
+          export LC_ALL=C
+          export JACK_SERVER_VM_ARGUMENTS="-Dfile.encoding=UTF-8 -XX:+TieredCompilation -Xmx4g"
+          export _JAVA_OPTIONS="-Djdk.util.zip.disableZip64ExtraFieldValidation=true -Djava.util.secureRandomSeed=true"
+          lunch ${{ env.MAKEFILE_NAME }}-userdebug
+
+          echo "external/chromium_org/third_party/WebKit/Source/build/scripts/rule_bison.py is invoked once for CSSGrammar.y and once for XPathGrammar.y, and both write into the same shared_intermediates/blink/core directory. Under parallel make (-j) these two invocations run concurrently and race, silently dropping one generated .hpp side-effect file with no error at generation time. Because the .cpp file itself is unaffected and its mtime ends up newer than the .y source, make considers that target up to date on every later build or retry and never re-runs the generation recipe, so the missing .hpp persists permanently once it happens - retries cannot fix it. Forcing this generation to run single-threaded here, before any parallel build touches the directory, eliminates the race."
+
+          CSS_PRIMARY="out/target/product/${{ env.DEVICE_NAME }}/obj/GYP/shared_intermediates/blink/core/CSSGrammar.cpp"
+          XPATH_PRIMARY="out/target/product/${{ env.DEVICE_NAME }}/obj/GYP/shared_intermediates/blink/core/XPathGrammar.cpp"
+          CSS_2ND="out/target/product/${{ env.DEVICE_NAME }}/obj_arm/GYP/shared_intermediates/blink/core/CSSGrammar.cpp"
+          XPATH_2ND="out/target/product/${{ env.DEVICE_NAME }}/obj_arm/GYP/shared_intermediates/blink/core/XPathGrammar.cpp"
+
+          make -j1 "${CSS_PRIMARY}" "${XPATH_PRIMARY}"
+
+          make -j1 "${CSS_2ND}" "${XPATH_2ND}" || echo "NOTE: secondary-arch (obj_arm) grammar targets were not independently reachable yet at this point in the build graph - continuing, since the primary-arch (obj/) generation is the one confirmed to race in the observed failure logs"
+
+          echo "Verifying primary-arch generated headers exist:"
+          for f in \
+            "out/target/product/${{ env.DEVICE_NAME }}/obj/GYP/shared_intermediates/blink/core/CSSGrammar.hpp" \
+            "out/target/product/${{ env.DEVICE_NAME }}/obj/GYP/shared_intermediates/blink/core/XPathGrammar.hpp"; do
+            if [ ! -f "$f" ]; then
+              echo "ERROR: expected generated header missing after serial pre-generation: $f"
+              exit 1
+            fi
+            echo "OK: $f"
+          done
+
+          for f in \
+            "out/target/product/${{ env.DEVICE_NAME }}/obj_arm/GYP/shared_intermediates/blink/core/CSSGrammar.hpp" \
+            "out/target/product/${{ env.DEVICE_NAME }}/obj_arm/GYP/shared_intermediates/blink/core/XPathGrammar.hpp"; do
+            if [ -f "$f" ]; then
+              echo "OK: $f"
+            else
+              echo "NOTE: $f not present yet - will be generated later during the main build; not treated as fatal here since it was not the confirmed failure point"
+            fi
+          done
+
       - name: Building LineageOS
         working-directory: ${{ steps.pwd.outputs.workspace-folder }}
         run: |
