@@ -40,7 +40,6 @@ jobs:
           sudo apt update
           sudo apt -y upgrade
           sudo apt -y install \
-            bison flex \
             gperf gcc-multilib gcc-10-multilib g++-multilib g++-10-multilib \
             libc6-dev lib32ncurses5-dev x11proto-core-dev libx11-dev tree \
             lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc bc ccache \
@@ -205,6 +204,53 @@ jobs:
           echo "timestamps:"
           ls -la "${DEX2OAT_BIN}" "${DEX2OAT_REAL}"
                   
+      - name: Pre-generate racy Blink bison grammar sources single-threaded
+        working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+        run: |
+          source build/envsetup.sh
+          export ALLOW_MISSING_DEPENDENCIES=true
+          export LC_ALL=C
+          export JACK_SERVER_VM_ARGUMENTS="-Dfile.encoding=UTF-8 -XX:+TieredCompilation -Xmx4g"
+          export _JAVA_OPTIONS="-Djdk.util.zip.disableZip64ExtraFieldValidation=true -Djava.util.secureRandomSeed=true"
+          lunch ${{ env.MAKEFILE_NAME }}-userdebug
+
+          echo "external/chromium_org/third_party/WebKit/Source/build/scripts/rule_bison.py runs CSSGrammar.y and XPathGrammar.y concurrently under -j builds and writes both into the same shared_intermediates/blink/core directory. This has a file-clobbering race that silently drops the generated .hpp (observed: CSSGrammar.hpp missing at compile time despite no error at generation time). Forcing these two targets through single-job make first avoids the concurrent invocation entirely."
+
+          CSS_CPP_PRIMARY="out/target/product/${{ env.DEVICE_NAME }}/obj/GYP/shared_intermediates/blink/core/CSSGrammar.cpp"
+          XPATH_CPP_PRIMARY="out/target/product/${{ env.DEVICE_NAME }}/obj/GYP/shared_intermediates/blink/core/XPathGrammar.cpp"
+          CSS_HPP_PRIMARY="out/target/product/${{ env.DEVICE_NAME }}/obj/GYP/shared_intermediates/blink/core/CSSGrammar.hpp"
+          XPATH_HPP_PRIMARY="out/target/product/${{ env.DEVICE_NAME }}/obj/GYP/shared_intermediates/blink/core/XPathGrammar.hpp"
+
+          CSS_CPP_2ND="out/target/product/${{ env.DEVICE_NAME }}/obj_arm/GYP/shared_intermediates/blink/core/CSSGrammar.cpp"
+          XPATH_CPP_2ND="out/target/product/${{ env.DEVICE_NAME }}/obj_arm/GYP/shared_intermediates/blink/core/XPathGrammar.cpp"
+          CSS_HPP_2ND="out/target/product/${{ env.DEVICE_NAME }}/obj_arm/GYP/shared_intermediates/blink/core/CSSGrammar.hpp"
+          XPATH_HPP_2ND="out/target/product/${{ env.DEVICE_NAME }}/obj_arm/GYP/shared_intermediates/blink/core/XPathGrammar.hpp"
+
+          echo "::group::Serial pre-build (primary arch: TARGET_ARCH)"
+          make -j1 "${CSS_CPP_PRIMARY}" "${XPATH_CPP_PRIMARY}"
+          echo "::endgroup::"
+
+          for f in "${CSS_HPP_PRIMARY}" "${XPATH_HPP_PRIMARY}"; do
+            if [ ! -f "$f" ]; then
+              echo "ERROR: expected generated header missing after serial pre-build: $f"
+              echo "The rule_bison.py output layout may differ from what this workflow assumes - re-check external/chromium_org/third_party/WebKit/Source/build/scripts/rule_bison.py before proceeding."
+              exit 1
+            fi
+            echo "OK: $f"
+          done
+
+          echo "::group::Serial pre-build (secondary arch: TARGET_2ND_ARCH, best-effort)"
+          make -j1 "${CSS_CPP_2ND}" "${XPATH_CPP_2ND}" || echo "Secondary-arch targets not independently reachable at this point in the build graph - will rely on the main build to generate them; if the race resurfaces for obj_arm, it will surface as the same CSSGrammar.hpp/XPathGrammar.hpp missing error scoped to obj_arm."
+          echo "::endgroup::"
+
+          for f in "${CSS_HPP_2ND}" "${XPATH_HPP_2ND}"; do
+            if [ -f "$f" ]; then
+              echo "OK: $f"
+            else
+              echo "NOTE: $f not present yet (expected if the secondary-arch target was not independently reachable above); main build will generate it."
+            fi
+          done
+
       - name: Building LineageOS
         working-directory: ${{ steps.pwd.outputs.workspace-folder }}
         run: |
