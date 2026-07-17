@@ -38,8 +38,7 @@ ADDITIONAL_DEFAULT_PROPERTIES += \
     ro.oem_unlock_supported=0 \
     ro.com.android.mobiledata=false \
     ro.allow.mock.location=0 \
-    ro.zygote=zygote64_32 \
-    ro.mount.fs=EXT4
+    ro.zygote=zygote64_32
 
 PRODUCT_PROPERTY_OVERRIDES += \
     ro.build.selinux=0 \
@@ -58,12 +57,6 @@ PRODUCT_PROPERTY_OVERRIDES += \
 ADDITIONAL_BUILD_PROPERTIES += \
     ro.build.selinux=0 \
     persist.radio.noril=1 \
-    ro.setupwizard.enable_bypass=1 \
-    ro.setupwizard.enterprise_mode=0 \
-    ro.setupwizard.mode=OPTIONAL \
-    ro.setupwizard.gservices_delay=-1 \
-    ro.setupwizard.network_required=false \
-    ro.setupwizard.rotation_locked=true \
     ro.carrier=wifi-only \
     persist.bandwidth.enable=0 \
     dalvik.vm.heapstartsize=4m \
@@ -84,46 +77,7 @@ ADDITIONAL_BUILD_PROPERTIES += \
     ro.hwui.text_small_cache_height=512 \
     ro.hwui.text_large_cache_width=1280 \
     ro.hwui.text_large_cache_height=512 \
-    media.sf.omx-plugin=libffmpeg_omx.so \
-    media.sf.extractor-plugin=libffmpeg_extractor.so \
-    ro.storage_manager.enabled=true \
-    media.stagefright.legacyencoder=true \
-    media.stagefright.less-secure=true \
     ro.telephony.disable=true \
-    ro.config.ringtone=Zen.ogg \
-    ro.config.alarm_alert=Flow.ogg \
-    ro.config.notification_sound=Chime.ogg \
-    ro.btstack=blueangel \
-    ro.sf.hwrotation=270 \
-    fmradio.driver.enable=0 \
-    ro.mtk_support_mp2_playback=1 \
-    ro.mtk_audio_alac_support=1 \
-    ro.mtk_search_db_support=1 \
-    ro.mtk_dhcpv6c_wifi=1 \
-    ro.have_aacencode_feature=1 \
-    ro.mtk_audio_ape_support=1 \
-    ro.mtk_wmv_playback_support=1 \
-    ro.mtk_flight_mode_power_off_md=1 \
-    ro.mtk_emmc_support=1 \
-    ro.mtk_shared_sdcard=1 \
-    ro.mtk_blulight_def_support=1 \
-    ro.mtk_owner_sdcard_support=0 \
-    ro.mtk_multi_patition=1 \
-    ro.mtk_bg_power_saving_support=0 \
-    ro.mtk_bg_power_saving_ui=0 \
-    ro.have_aee_feature=0 \
-    ro.mtk_is_tablet=1 \
-    wfd.dummy.enable=0 \
-    wfd.iframesize.level=0 \
-    ro.mediatek.project.path=device/sts/a04br3 \
-    ro.mtk_sec_video_path_support=1 \
-    persist.mtk.wcn.dynamic.dump=0 \
-    ro.com.android.mobiledata=false \
-    ro.mtk_deinterlace_support=1 \
-    ro.boot.opt_using_default=1 \
-    mtk.vdec.waitkeyframeforplay=1 \
-    ro.sys.sdcardfs=1 \
-    ro.com.google.ime.theme_id=5 \
     persist.sys.timezone=Asia/Tokyo
 
 PRODUCT_PACKAGES += \
@@ -176,6 +130,6 @@ PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/rootdir/etc/init.cm.rc:root/init.cm.rc \
     $(LOCAL_PATH)/rootdir/etc/init.rc:root/init.rc
 
-include device/sts/a04br3/media.mk
-include device/sts/a04br3/wifi.mk
-include device/sts/a04br3/permissions.mk
+include device/sts/a03br/media.mk
+include device/sts/a03br/wifi.mk
+include device/sts/a03br/permissions.mk
