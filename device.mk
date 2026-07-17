@@ -131,5 +131,4 @@ PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/rootdir/etc/init.rc:root/init.rc
 
 include device/sts/a03br/media.mk
-include device/sts/a03br/wifi.mk
 include device/sts/a03br/permissions.mk
