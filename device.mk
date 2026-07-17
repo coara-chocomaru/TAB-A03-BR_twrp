@@ -1,4 +1,3 @@
-$(call inherit-product, $(SRC_TARGET_DIR)/product_launched_with_l_mr1.mk)
 PRODUCT_SHIPPING_API_LEVEL := 22
 PRODUCT_FIRST_API_LEVEL := 22
 PRODUCT_CHARACTERISTICS := tablet
