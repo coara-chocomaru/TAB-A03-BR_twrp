@@ -1,0 +1,221 @@
+name: LineageOS 
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  MANIFEST_URL: 'https://github.com/LineageOS/android'
+  MANIFEST_BRANCH: 'cm-12.1'
+  DEVICE_NAME: 'a03br'
+  MAKEFILE_NAME: 'lineage_a03br'
+  BUILD_TARGET: 'bacon'
+jobs:
+  build:
+    if: github.event.repository.owner.id == github.event.sender.id
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: Display Run Parameters
+        run: |
+          echo "::group::User Environment Variables"
+          echo "Manifest URL: ${{ env.MANIFEST_URL }}"
+          echo "Manifest Branch: ${{ env.MANIFEST_BRANCH }}"
+          echo "Device Name: ${{ env.DEVICE_NAME }}"
+          echo "Makefile Name: ${{ env.MAKEFILE_NAME }}"
+          echo "Build Target: ${{ env.BUILD_TARGET }}"
+          echo "::endgroup::"
+
+      - name: Check Out
+        uses: actions/checkout@v3
+
+      - name: Cleanup
+        uses: rokibhasansagar/slimhub_actions@main
+
+      - name: Prepare the environment
+        run: |
+          sudo apt update
+          sudo apt -y upgrade
+          sudo apt -y install \
+            gperf gcc-multilib gcc-10-multilib g++-multilib g++-10-multilib \
+            libc6-dev lib32ncurses5-dev x11proto-core-dev libx11-dev tree \
+            lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc bc ccache \
+            lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev \
+            libsdl1.2-dev libwxgtk3.0-gtk3-dev libxml2 lzop pngcrush \
+            schedtool squashfs-tools imagemagick libbz2-dev lzma ncftp \
+            qemu-user-static libstdc++-10-dev libncurses5 python3 libtinfo5 \
+            libssl-dev bsdmainutils zip unzip
+
+      - name: Install OpenJDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '8'
+
+      - name: Install repo
+        run: |
+          mkdir -p ~/bin
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+          chmod a+x ~/bin/repo
+          sudo ln -sf ~/bin/repo /usr/bin/repo
+
+      - name: Initialize repo
+        id: pwd
+        run: |
+          mkdir workspace
+          cd workspace
+          echo "workspace-folder=$(pwd)" >> "$GITHUB_OUTPUT"
+          git config --global user.name "azwhikaru"
+          git config --global user.email "azwhikaru+37921907@github.com"
+          repo init --depth=1 -u ${{ env.MANIFEST_URL }} -b ${{ env.MANIFEST_BRANCH }}
+
+      - name: Create Local Manifest
+        run: |
+          mkdir -p workspace/.repo/local_manifests
+          cat << 'EOF' > workspace/.repo/local_manifests/roomservice.xml
+          <?xml version="1.0" encoding="UTF-8"?>
+          <manifest>
+              <project name="coara-chocomaru/ct2-br" path="device/sts/a03br" remote="github" revision="main" />
+              <project name="coara-chocomaru/a03-br_vendor_blob" path="vendor/sts/a03br" remote="github" revision="main" />
+          </manifest>
+          EOF
+
+      - name: Repo Sync
+        working-directory: workspace
+        run: |
+          repo sync -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
+
+      - name: Fetch Git LFS files for all repositories
+        working-directory: workspace
+        run: |
+          repo forall -v -c git lfs pull
+
+      - name: Verify WebView APK
+        working-directory: workspace/external/chromium-webview
+        run: |
+          APK="prebuilt/arm64/webview.apk"
+          if [ ! -f "$APK" ];
+          then
+            echo "Error: $APK does not exist"
+            exit 1
+          fi
+          if file "$APK" | grep -q "ASCII text"; then
+            echo "Error: $APK is still an LFS pointer file"
+            echo "Pointer content:"
+            cat "$APK"
+            exit 1
+          fi
+          if ! file "$APK" | grep -q "Zip archive"; then
+            echo "Error: $APK is not a valid ZIP archive"
+            file "$APK"
+            exit 1
+          fi
+          echo "WebView APK verified successfully."
+          ls -lh "$APK"
+
+      - name: Set Swap Space
+        uses: pierotofy/set-swap-space@master
+        with:
+          swap-size-gb: 12
+                      
+      - name: Switch to Python 2
+        run: |
+          sudo apt -y install python2
+          sudo update-alternatives --install /usr/bin/python python /usr/bin/python2 1
+          python --version
+
+      - name: Build mmap_fix preload library
+        run: |
+          cat > /tmp/mmap_fix.c << 'CSRC'
+          #define _GNU_SOURCE
+          #include <sys/mman.h>
+          #include <dlfcn.h>
+          #include <stdint.h>
+          #include <string.h>
+
+          static void *(*real_mmap)(void *, size_t, int, int, int, __off_t) = NULL;
+          void *mmap(void *addr, size_t length, int prot, int flags, int fd, __off_t offset) {
+              if (!real_mmap) {
+                  real_mmap = dlsym(RTLD_NEXT, "mmap");
+              }
+              void *result = real_mmap(addr, length, prot, flags, fd, offset);
+              if (addr != NULL &&
+                  result != (void *)-1 &&
+                  result != addr &&
+                  !(flags & MAP_FIXED)) {
+                  uintptr_t target = (uintptr_t)addr;
+                  if (target >= 0x40000000UL && target < 0xC0000000UL) {
+                      munmap(result, length);
+                      result = real_mmap(addr, length, prot, flags | MAP_FIXED, fd, offset);
+                  }
+              }
+              return result;
+          }
+          CSRC
+          gcc -O2 -shared -fPIC -o /tmp/mmap_fix.so /tmp/mmap_fix.c -ldl
+          echo "mmap_fix.so built:"
+          ls -lh /tmp/mmap_fix.so
+
+      - name: Build host dex2oat
+        working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+        run: |
+          source build/envsetup.sh
+          export ALLOW_MISSING_DEPENDENCIES=true
+          export LC_ALL=C
+          export JACK_SERVER_VM_ARGUMENTS="-Dfile.encoding=UTF-8 -XX:+TieredCompilation -Xmx4g"
+          export _JAVA_OPTIONS="-Djdk.util.zip.disableZip64ExtraFieldValidation=true -Djava.util.secureRandomSeed=true"
+          lunch ${{ env.MAKEFILE_NAME }}-userdebug
+
+          mkdir -p out/target/product/${{ env.DEVICE_NAME }}/obj/KERNEL_OBJ/usr/include/linux
+          touch out/target/product/${{ env.DEVICE_NAME }}/obj/KERNEL_OBJ/usr/include/linux/version.h
+          touch out/target/product/${{ env.DEVICE_NAME }}/obj/KERNEL_OBJ/usr/include/linux/autoconf.h
+          touch out/target/product/${{ env.DEVICE_NAME }}/obj/KERNEL_OBJ/usr/include/linux/kernel.h
+
+          make -j$(nproc --all) dex2oat
+
+      - name: Wrap dex2oat with LD_PRELOAD mmap_fix
+        working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+        run: |
+          DEX2OAT_BIN="out/host/linux-x86/bin/dex2oat"
+          DEX2OAT_REAL="out/host/linux-x86/bin/dex2oat.real"
+          mv "${DEX2OAT_BIN}" "${DEX2OAT_REAL}"
+          printf '#!/bin/bash\nexec env LD_PRELOAD="/tmp/mmap_fix.so" "%s/%s" "$@"\n' \
+            "$(pwd)" "${DEX2OAT_REAL}" > "${DEX2OAT_BIN}"
+          chmod +x "${DEX2OAT_BIN}"
+          touch -t 209901010000.00 "${DEX2OAT_BIN}" "${DEX2OAT_REAL}"
+          echo "dex2oat wrapper:"
+          cat "${DEX2OAT_BIN}"
+          echo "timestamps:"
+          ls -la "${DEX2OAT_BIN}" "${DEX2OAT_REAL}"
+                  
+      - name: Building LineageOS
+        working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+        run: |
+          source build/envsetup.sh
+          export ALLOW_MISSING_DEPENDENCIES=true
+          export LC_ALL=C
+          export JACK_SERVER_VM_ARGUMENTS="-Dfile.encoding=UTF-8 -XX:+TieredCompilation -Xmx4g"
+          export _JAVA_OPTIONS="-Djdk.util.zip.disableZip64ExtraFieldValidation=true -Djava.util.secureRandomSeed=true"
+          export WITH_DEXPREOPT=true
+          lunch ${{ env.MAKEFILE_NAME }}-userdebug
+
+          rm -rf out/target/product/${{ env.DEVICE_NAME }}/obj/APPS/webview_intermediates
+          rm -rf out/target/product/${{ env.DEVICE_NAME }}/obj/APPS/ChromeWebView_intermediates 2>/dev/null || true
+
+          make org.cyanogenmod.platform-res -j$(nproc --all)
+          make webview -j$(nproc --all)
+          make ${{ env.BUILD_TARGET }} -j$(nproc --all) WITH_DEXPREOPT=true
+      
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.DEVICE_NAME }}-${{ github.run_id }}
+          path: |
+            workspace/out/target/product/${{ env.DEVICE_NAME }}/lineage-*.zip
+            workspace/out/target/product/${{ env.DEVICE_NAME }}/boot.img
+            workspace/out/target/product/${{ env.DEVICE_NAME }}/recovery.img
+          retention-days: 14
+          if-no-files-found: error
