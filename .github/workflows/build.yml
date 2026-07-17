@@ -16,6 +16,7 @@ jobs:
   build:
     if: github.event.repository.owner.id == github.event.sender.id
     runs-on: ubuntu-22.04
+    timeout-minutes: 350
     permissions:
       contents: write
     steps:
@@ -204,7 +205,7 @@ jobs:
           echo "timestamps:"
           ls -la "${DEX2OAT_BIN}" "${DEX2OAT_REAL}"
                   
-      - name: Pre-generate Blink CSSGrammar/XPathGrammar sources serially (avoid rule_bison.py race)
+      - name: Pre-build WebKit generated-sources module serially (avoid rule_bison.py race)
         working-directory: ${{ steps.pwd.outputs.workspace-folder }}
         run: |
           source build/envsetup.sh
@@ -214,37 +215,33 @@ jobs:
           export _JAVA_OPTIONS="-Djdk.util.zip.disableZip64ExtraFieldValidation=true -Djava.util.secureRandomSeed=true"
           lunch ${{ env.MAKEFILE_NAME }}-userdebug
 
-          echo "external/chromium_org/third_party/WebKit/Source/build/scripts/rule_bison.py is invoked once for CSSGrammar.y and once for XPathGrammar.y, and both write into the same shared_intermediates/blink/core directory. Under parallel make (-j) these two invocations run concurrently and race, silently dropping one generated .hpp side-effect file with no error at generation time. Because the .cpp file itself is unaffected and its mtime ends up newer than the .y source, make considers that target up to date on every later build or retry and never re-runs the generation recipe, so the missing .hpp persists permanently once it happens - retries cannot fix it. Forcing this generation to run single-threaded here, before any parallel build touches the directory, eliminates the race."
+          echo "external/chromium_org/third_party/WebKit/Source/build/scripts/rule_bison.py is invoked once for CSSGrammar.y and once for XPathGrammar.y as GENERATED_SOURCES of the third_party_WebKit_Source_core_webcore_generated_gyp static-library module, and both write into the same shared_intermediates/blink/core directory. Under parallel make (-j) these two invocations run concurrently and race, silently dropping one generated .hpp side-effect file with no error at generation time. Because the .cpp file itself is unaffected and its mtime ends up newer than the .y source, make considers that target up to date on every later build or retry and never re-runs the generation recipe, so the missing .hpp persists permanently once it happens - retries cannot fix it."
+          echo "A prior attempt tried to request the generated .cpp file paths directly as make goals, but that failed with 'No rule to make target' - the GYP-derived build rules in this checked-in-from-upstream Makefile tree are not reliably reachable as bare file targets outside the owning module's own dependency walk. Instead, build the actual known-valid module name (confirmed from the build log: 'third_party_WebKit_Source_core_webcore_generated_gyp') with -j1 so every recipe inside it, including both bison invocations, executes strictly one at a time - this removes the race entirely, at the cost of that one module taking longer to build serially."
 
-          CSS_PRIMARY="out/target/product/${{ env.DEVICE_NAME }}/obj/GYP/shared_intermediates/blink/core/CSSGrammar.cpp"
-          XPATH_PRIMARY="out/target/product/${{ env.DEVICE_NAME }}/obj/GYP/shared_intermediates/blink/core/XPathGrammar.cpp"
-          CSS_2ND="out/target/product/${{ env.DEVICE_NAME }}/obj_arm/GYP/shared_intermediates/blink/core/CSSGrammar.cpp"
-          XPATH_2ND="out/target/product/${{ env.DEVICE_NAME }}/obj_arm/GYP/shared_intermediates/blink/core/XPathGrammar.cpp"
+          make -j1 third_party_WebKit_Source_core_webcore_generated_gyp
 
-          make -j1 "${CSS_PRIMARY}" "${XPATH_PRIMARY}"
-
-          make -j1 "${CSS_2ND}" "${XPATH_2ND}" || echo "NOTE: secondary-arch (obj_arm) grammar targets were not independently reachable yet at this point in the build graph - continuing, since the primary-arch (obj/) generation is the one confirmed to race in the observed failure logs"
-
-          echo "Verifying primary-arch generated headers exist:"
+          echo "Verifying the generated grammar headers exist after serial module build:"
           for f in \
             "out/target/product/${{ env.DEVICE_NAME }}/obj/GYP/shared_intermediates/blink/core/CSSGrammar.hpp" \
             "out/target/product/${{ env.DEVICE_NAME }}/obj/GYP/shared_intermediates/blink/core/XPathGrammar.hpp"; do
             if [ ! -f "$f" ]; then
-              echo "ERROR: expected generated header missing after serial pre-generation: $f"
+              echo "ERROR: expected generated header missing after serial pre-build: $f"
               exit 1
             fi
             echo "OK: $f"
           done
 
-          for f in \
-            "out/target/product/${{ env.DEVICE_NAME }}/obj_arm/GYP/shared_intermediates/blink/core/CSSGrammar.hpp" \
-            "out/target/product/${{ env.DEVICE_NAME }}/obj_arm/GYP/shared_intermediates/blink/core/XPathGrammar.hpp"; do
-            if [ -f "$f" ]; then
-              echo "OK: $f"
-            else
-              echo "NOTE: $f not present yet - will be generated later during the main build; not treated as fatal here since it was not the confirmed failure point"
-            fi
-          done
+          echo "Safety net: scanning shared_intermediates/blink for any other .h generated without its .hpp counterpart (same class of rule_bison.py race, in case other grammar-derived files are affected), and symlinking them so a stray one does not silently break the later parallel build."
+          BLINK_DIR="out/target/product/${{ env.DEVICE_NAME }}/obj/GYP/shared_intermediates/blink"
+          if [ -d "${BLINK_DIR}" ]; then
+            find "${BLINK_DIR}" -name '*.cpp' | while read -r cppfile; do
+              base="${cppfile%.cpp}"
+              if [ -f "${base}.h" ] && [ ! -e "${base}.hpp" ]; then
+                ln -s "$(basename "${base}.h")" "${base}.hpp"
+                echo "symlinked missing header: ${base}.hpp -> $(basename "${base}.h")"
+              fi
+            done
+          fi
 
       - name: Building LineageOS
         working-directory: ${{ steps.pwd.outputs.workspace-folder }}
