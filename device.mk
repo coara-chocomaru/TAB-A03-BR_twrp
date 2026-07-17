@@ -115,20 +115,33 @@ PRODUCT_PACKAGES += \
     init.rc
 
 PRODUCT_COPY_FILES += \
-    $(LOCAL_PATH)/rootdir/etc/init.mt8167.rc:root/init.mt8167.rc \
-    $(LOCAL_PATH)/rootdir/etc/init.mt8167.usb.rc:root/init.mt8167.usb.rc \
-    $(LOCAL_PATH)/rootdir/etc/fstab.mt8167:root/fstab.mt8167 \
-    $(LOCAL_PATH)/rootdir/etc/init.recovery.mt8167.rc:root/init.recovery.mt8167.rc \
-    $(LOCAL_PATH)/rootdir/etc/init.connectivity.rc:root/init.connectivity.rc \
-    $(LOCAL_PATH)/rootdir/etc/ueventd.mt8167.rc:root/ueventd.mt8167.rc \
-    $(LOCAL_PATH)/rootdir/etc/init.usb.rc:root/init.usb.rc \
-    $(LOCAL_PATH)/rootdir/etc/init.usb.configfs.rc:root/init.usb.configfs.rc \
-    $(LOCAL_PATH)/rootdir/etc/ueventd.rc:root/ueventd.rc \
-    $(LOCAL_PATH)/rootdir/etc/init.modem.rc:root/init.modem.rc \
-    $(LOCAL_PATH)/rootdir/etc/init.zygote32.rc:root/init.zygote32.rc \
-    $(LOCAL_PATH)/rootdir/etc/init.zygote64_32.rc:root/init.zygote64_32.rc \
-    $(LOCAL_PATH)/rootdir/etc/init.cm.rc:root/init.cm.rc \
-    $(LOCAL_PATH)/rootdir/etc/init.rc:root/init.rc
+    $(LOCAL_PATH)/rootdir/fstab.pxa1928:root/fstab.pxa1928 \
+    $(LOCAL_PATH)/rootdir/init.pxa1928.power.rc:root/init.pxa1928.power.rc \
+    $(LOCAL_PATH)/rootdir/init.pxa1928.rc:root/init.pxa1928.rc \
+    $(LOCAL_PATH)/rootdir/init.pxa1928.sensor.rc:root/init.pxa1928.sensor.rc \
+    $(LOCAL_PATH)/rootdir/init.pxa1928.usb.rc:root/init.pxa1928.usb.rc \
+    $(LOCAL_PATH)/rootdir/init.usb.rc:root/init.usb.rc \
+    $(LOCAL_PATH)/rootdir/init.zygote32.rc:root/init.zygote32.rc \
+    $(LOCAL_PATH)/rootdir/init.zygote64_32.rc:root/init.zygote64_32.rc \
+    $(LOCAL_PATH)/rootdir/lib/modules/gator.ko:root/lib/modules/gator.ko \
+    $(LOCAL_PATH)/rootdir/lib/modules/gspca_main.ko:root/lib/modules/gspca_main.ko \
+    $(LOCAL_PATH)/rootdir/lib/modules/mbt8777.ko:root/lib/modules/mbt8777.ko \
+    $(LOCAL_PATH)/rootdir/lib/modules/mbt8787.ko:root/lib/modules/mbt8787.ko \
+    $(LOCAL_PATH)/rootdir/lib/modules/mbt8887.ko:root/lib/modules/mbt8887.ko \
+    $(LOCAL_PATH)/rootdir/lib/modules/mlan8777.ko:root/lib/modules/mlan8777.ko \
+    $(LOCAL_PATH)/rootdir/lib/modules/mlan8787.ko:root/lib/modules/mlan8787.ko \
+    $(LOCAL_PATH)/rootdir/lib/modules/mlan8801.ko:root/lib/modules/mlan8801.ko \
+    $(LOCAL_PATH)/rootdir/lib/modules/mlan8887.ko:root/lib/modules/mlan8887.ko \
+    $(LOCAL_PATH)/rootdir/lib/modules/sd8777.ko:root/lib/modules/sd8777.ko \
+    $(LOCAL_PATH)/rootdir/lib/modules/sd8787.ko:root/lib/modules/sd8787.ko \
+    $(LOCAL_PATH)/rootdir/lib/modules/sd8801.ko:root/lib/modules/sd8801.ko \
+    $(LOCAL_PATH)/rootdir/lib/modules/sd8887.ko:root/lib/modules/sd8887.ko \
+    $(LOCAL_PATH)/rootdir/res/wifi/ed_mac_ctrl.conf:root/res/wifi/ed_mac_ctrl.conf \
+    $(LOCAL_PATH)/rootdir/res/wifi/ed_mac_ctrl_8801.conf:root/res/wifi/ed_mac_ctrl_8801.conf \
+    $(LOCAL_PATH)/rootdir/res/wifi/mlaninit.sh:root/res/wifi/mlaninit.sh \
+    $(LOCAL_PATH)/rootdir/res/wifi/mlaninit_8801.sh:root/res/wifi/mlaninit_8801.sh \
+    $(LOCAL_PATH)/rootdir/ueventd.pxa1928.rc:root/ueventd.pxa1928.rc \
+    $(LOCAL_PATH)/rootdir/ueventd.rc:root/ueventd.rc
 
 include device/sts/a03br/media.mk
 include device/sts/a03br/permissions.mk
