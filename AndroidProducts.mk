@@ -1,5 +1,5 @@
 PRODUCT_MAKEFILES := \
-    $(LOCAL_DIR)/omni_pocketalk.mk
+    $(LOCAL_DIR)/lineage_a03br.mk
 
 COMMON_LUNCH_CHOICES := \
-    omni_pocketalk-eng
+    lineage_a03br-eng
