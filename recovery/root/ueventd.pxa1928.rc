@@ -1,10 +1,6 @@
 /sys/devices/virtual/input/input* active 0660 root input
 /sys/devices/virtual/input/input* interval 0660 root input
 /sys/devices/virtual/input/input* wake 0660 root input
-
-# cpufreq
-# cpufreq customize governor parameters
-## ondemand
 /sys/devices/system/cpu/cpufreq ondemand/sampling_rate 0644 system root
 /sys/devices/system/cpu/cpufreq ondemand/up_threshold 0644 system root
 /sys/devices/system/cpu/cpufreq ondemand/powersave_bias 0644 system root
