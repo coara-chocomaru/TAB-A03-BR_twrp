@@ -25,12 +25,6 @@
 /dev/alarm-poweroff 0660 system system
 /dev/block/platform/soc.1/by-name/persistent 0600 system system
 
-# fm
-/dev/mfmchar* 0660 system system
-
-# nfc
-/dev/mnfcchar* 0660 system nfc
-
 # cpufreq
 # cpufreq customize governor parameters
 ## ondemand
@@ -62,28 +56,6 @@
 /sys/devices/system/cpu/cpufreq interactive/timer_slack 0644 system root
 /sys/devices/system/cpu/cpufreq interactive/io_is_busy 0644 system root
 
-# telephony
-/dev/citty* 0660 radio system
-/dev/ccichar 0640 radio radio
-/dev/ttyS2 0600 system system
-/dev/cctdatadev0 0640 system system
-/dev/cctdatadev1 0660 radio bluetooth
-/dev/cidatatty* 0640 radio radio
-/dev/cidatatty1 0660 radio bluetooth
-/dev/cidatatty2 0660 media media
-/dev/cctdev* 0660 system system
-/dev/msocket 0660 system system
-/dev/msocket_dump 0660 system system
-/dev/diag_dump 0660 system system
-/dev/ccidatastub 0660 system system
-/dev/psdatastub 0660 system system
-/dev/seh 0660 system system
-/dev/audiostub_ctl 0660 media system
-/dev/audiostub_pcm 0660 media system
-/dev/ttymodem* 0660 system system
-/dev/ttydiag* 0660 system system
-/dev/ttyGS0 0660 system system
-/dev/ppprd 0660 system system
 # MRD partition
 /dev/block/mmcblk0p1 0660 system system
 # MRD backup partition
