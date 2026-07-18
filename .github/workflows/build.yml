@@ -1,312 +1,163 @@
-name: LineageOS 
+name: Recovery Build (Legacy)
 
 on:
   push:
     branches:
       - mainj
-  workflow_dispatch:
 
 env:
-  MANIFEST_URL: 'https://github.com/LineageOS/android'
-  MANIFEST_BRANCH: 'cm-12.1'
+  MANIFEST_URL: 'https://github.com/minimal-manifest-twrp/platform_manifest_twrp_omni'
+  MANIFEST_BRANCH: 'twrp-5.1'
+  DEVICE_TREE_URL: 'https://github.com/coara-chocomaru/a03-br'
+  DEVICE_TREE_BRANCH: 'main'
+  DEVICE_PATH: 'device/sts/a03br'
   DEVICE_NAME: 'a03br'
-  MAKEFILE_NAME: 'lineage_a03br'
-  BUILD_TARGET: 'bacon'
+  MAKEFILE_NAME: 'omni_a03br'
+  BUILD_TARGET: 'recovery'
+
 jobs:
   build:
     if: github.event.repository.owner.id == github.event.sender.id
     runs-on: ubuntu-22.04
-    timeout-minutes: 350
     permissions:
       contents: write
     steps:
-      - name: Display Run Parameters
-        run: |
-          echo "::group::User Environment Variables"
-          echo "Manifest URL: ${{ env.MANIFEST_URL }}"
-          echo "Manifest Branch: ${{ env.MANIFEST_BRANCH }}"
-          echo "Device Name: ${{ env.DEVICE_NAME }}"
-          echo "Makefile Name: ${{ env.MAKEFILE_NAME }}"
-          echo "Build Target: ${{ env.BUILD_TARGET }}"
-          echo "::endgroup::"
+    - name: Display Run Parameters
+      run: |
+        echo "::group::User Environment Variables"
+        echo "Manifest URL: ${{ env.MANIFEST_URL }}"
+        echo "Manifest Branch: ${{ env.MANIFEST_BRANCH }}"
+        echo "Device Tree URL: ${{ env.DEVICE_TREE_URL }}"
+        echo "Device Tree Branch: ${{ env.DEVICE_TREE_BRANCH }}"
+        echo "Device Path: ${{ env.DEVICE_PATH }}"
+        echo "Device Name: ${{ env.DEVICE_NAME }}"
+        echo "Makefile Name: ${{ env.MAKEFILE_NAME }}"
+        echo "Build Target: ${{ env.BUILD_TARGET }}.img"
+        echo "::endgroup::"
 
-      - name: Check Out
-        uses: actions/checkout@v3
+    - name: Check Out
+      uses: actions/checkout@v3
 
-      - name: Cleanup
-        uses: rokibhasansagar/slimhub_actions@main
+    - name: Cleanup
+      uses: rokibhasansagar/slimhub_actions@main
 
-      - name: Prepare the environment
-        run: |
-          sudo apt update
-          sudo apt -y upgrade
-          sudo apt -y install \
-            gperf gcc-multilib gcc-10-multilib g++-multilib g++-10-multilib \
-            libc6-dev lib32ncurses5-dev x11proto-core-dev libx11-dev tree \
-            lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc bc ccache \
-            lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev \
-            libsdl1.2-dev libwxgtk3.0-gtk3-dev libxml2 lzop pngcrush \
-            schedtool squashfs-tools imagemagick libbz2-dev lzma ncftp \
-            qemu-user-static libstdc++-10-dev libncurses5 python3 libtinfo5 \
-            libssl-dev bsdmainutils zip unzip
+    - name: Prepare the environment (install packages, ensure python -> python2)
+      run: |
+        sudo apt update
+        sudo apt -y upgrade
 
-      - name: Install OpenJDK
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'zulu'
-          java-version: '7'
+        # Essential build packages (kept your original list, added rsync/curl and python2 tools)
+        sudo apt -y install \
+          gperf gcc-multilib gcc-10-multilib g++-multilib g++-10-multilib libc6-dev \
+          lib32ncurses5-dev x11proto-core-dev libx11-dev tree lib32z-dev libgl1-mesa-dev libxml2-utils \
+          xsltproc bc ccache lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev libsdl1.2-dev \
+          libwxgtk3.0-gtk3-dev libxml2 lzop pngcrush schedtool squashfs-tools imagemagick \
+          libbz2-dev lzma ncftp qemu-user-static libstdc++-10-dev libncurses5 rsync curl unzip \
+          python2
 
-      - name: Install repo
-        run: |
-          mkdir -p ~/bin
-          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
-          chmod a+x ~/bin/repo
-          sudo ln -sf ~/bin/repo /usr/bin/repo
+        # Ensure `python` points to python2 (so repo and old scripts run)
+        sudo update-alternatives --install /usr/bin/python python /usr/bin/python2 1 || true
+        python --version
 
-      - name: Initialize repo
-        id: pwd
-        run: |
-          mkdir workspace
-          cd workspace
-          echo "workspace-folder=$(pwd)" >> "$GITHUB_OUTPUT"
-          git config --global user.name "azwhikaru"
-          git config --global user.email "azwhikaru+37921907@github.com"
-          repo init --depth=1 -u ${{ env.MANIFEST_URL }} -b ${{ env.MANIFEST_BRANCH }}
+        # Ensure ~/bin exists for repo binary
+        mkdir -p ~/bin
+        echo "Prepared environment"
 
-      - name: Create Local Manifest
-        run: |
-          mkdir -p workspace/.repo/local_manifests
-          cat << 'EOF' > workspace/.repo/local_manifests/roomservice.xml
-          <?xml version="1.0" encoding="UTF-8"?>
-          <manifest>
-              <project name="coara-chocomaru/ct2-br" path="device/sts/a03br" remote="github" revision="main" />
-              <project name="coara-chocomaru/a03-br_vendor_blob" path="vendor/sts/a03br" remote="github" revision="main" />
-          </manifest>
-          EOF
+    - name: Install OpenJDK
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'zulu'
+        java-version: '8'
 
-      - name: Repo Sync
-        working-directory: workspace
-        run: |
-          repo sync -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
+    - name: Setup SSH Keys
+      if: ${{ startsWith(env.MANIFEST_URL, 'git@github.com') }}
+      uses: webfactory/ssh-agent@v0.5.4
+      with:
+        ssh-private-key: |
+          ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Fetch Git LFS files for all repositories
-        working-directory: workspace
-        run: |
-          repo forall -v -c git lfs pull
-
-      - name: Patch Java version detection in build/core/main.mk
-        working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-        run: |
-          python3 - << 'PYEOF'
-          path = "build/core/main.mk"
-          with open(path, "r") as f:
-              content = f.read()
-
-          old_17 = r"""java_version := $(shell echo '$(java_version_str)' | grep '^java .*[ "]1\.7[\. "$$]')"""
-          new_17 = r"""java_version := $(shell echo '$(java_version_str)' | grep -i '[ "]1\.7[\. "$$]')"""
-          old_16 = r"""java_version := $(shell echo '$(java_version_str)' | grep '^java .*[ "]1\.6[\. "$$]')"""
-          new_16 = r"""java_version := $(shell echo '$(java_version_str)' | grep -i '[ "]1\.6[\. "$$]')"""
-
-          if old_17 not in content:
-              raise SystemExit(
-                  "ERROR: expected java_version (1.7) pattern not found in "
-                  + path
-                  + " - upstream main.mk may have changed, refusing to patch blindly"
-              )
-          if old_16 not in content:
-              raise SystemExit(
-                  "ERROR: expected java_version (1.6) pattern not found in "
-                  + path
-                  + " - upstream main.mk may have changed, refusing to patch blindly"
-              )
-
-          content = content.replace(old_17, new_17)
-          content = content.replace(old_16, new_16)
-
-          with open(path, "w") as f:
-              f.write(content)
-
-          print("Patched java_version detection (removed '^java' Oracle-only prefix requirement) in " + path)
-          PYEOF
-          grep -n "java_version :=" build/core/main.mk
-
-      - name: Set Swap Space
-        uses: pierotofy/set-swap-space@master
-        with:
-          swap-size-gb: 12
-                      
-      - name: Switch to Python 2
-        run: |
-          sudo apt -y install python2
-          sudo update-alternatives --install /usr/bin/python python /usr/bin/python2 1
-          python --version
-
-      - name: Build mmap_fix preload library
-        run: |
-          cat > /tmp/mmap_fix.c << 'CSRC'
-          #define _GNU_SOURCE
-          #include <sys/mman.h>
-          #include <dlfcn.h>
-          #include <stdint.h>
-          #include <string.h>
-
-          static void *(*real_mmap)(void *, size_t, int, int, int, __off_t) = NULL;
-          void *mmap(void *addr, size_t length, int prot, int flags, int fd, __off_t offset) {
-              if (!real_mmap) {
-                  real_mmap = dlsym(RTLD_NEXT, "mmap");
-              }
-              void *result = real_mmap(addr, length, prot, flags, fd, offset);
-              if (addr != NULL &&
-                  result != (void *)-1 &&
-                  result != addr &&
-                  !(flags & MAP_FIXED)) {
-                  uintptr_t target = (uintptr_t)addr;
-                  if (target >= 0x40000000UL && target < 0xC0000000UL) {
-                      munmap(result, length);
-                      result = real_mmap(addr, length, prot, flags | MAP_FIXED, fd, offset);
-                  }
-              }
-              return result;
-          }
-          CSRC
-          gcc -O2 -shared -fPIC -o /tmp/mmap_fix.so /tmp/mmap_fix.c -ldl
-          echo "mmap_fix.so built:"
-          ls -lh /tmp/mmap_fix.so
-
-      - name: Build host dex2oat
-        working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-        run: |
-          source build/envsetup.sh
-          export ALLOW_MISSING_DEPENDENCIES=true
-          export LC_ALL=C
-          export JACK_SERVER_VM_ARGUMENTS="-Dfile.encoding=UTF-8 -XX:+TieredCompilation -Xmx4g"
-          export _JAVA_OPTIONS="-Djdk.util.zip.disableZip64ExtraFieldValidation=true -Djava.util.secureRandomSeed=true"
-          lunch ${{ env.MAKEFILE_NAME }}-userdebug
-
-          mkdir -p out/target/product/${{ env.DEVICE_NAME }}/obj/KERNEL_OBJ/usr/include/linux
-          touch out/target/product/${{ env.DEVICE_NAME }}/obj/KERNEL_OBJ/usr/include/linux/version.h
-          touch out/target/product/${{ env.DEVICE_NAME }}/obj/KERNEL_OBJ/usr/include/linux/autoconf.h
-          touch out/target/product/${{ env.DEVICE_NAME }}/obj/KERNEL_OBJ/usr/include/linux/kernel.h
-
-          make -j$(nproc --all) dex2oat
-
-      - name: Wrap dex2oat with LD_PRELOAD mmap_fix
-        working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-        run: |
-          DEX2OAT_BIN="out/host/linux-x86/bin/dex2oat"
-          DEX2OAT_REAL="out/host/linux-x86/bin/dex2oat.real"
-          mv "${DEX2OAT_BIN}" "${DEX2OAT_REAL}"
-          printf '#!/bin/bash\nexec env LD_PRELOAD="/tmp/mmap_fix.so" "%s/%s" "$@"\n' \
-            "$(pwd)" "${DEX2OAT_REAL}" > "${DEX2OAT_BIN}"
-          chmod +x "${DEX2OAT_BIN}"
-          touch -t 209901010000.00 "${DEX2OAT_BIN}" "${DEX2OAT_REAL}"
-          echo "dex2oat wrapper:"
-          cat "${DEX2OAT_BIN}"
-          echo "timestamps:"
-          ls -la "${DEX2OAT_BIN}" "${DEX2OAT_REAL}"
-                  
-      - name: Fix WebKit bison-generated header naming mismatch, both arches (rule_bison.py vs modern bison)
-        working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-        run: |
-          source build/envsetup.sh
-          export ALLOW_MISSING_DEPENDENCIES=true
-          export LC_ALL=C
-          export JACK_SERVER_VM_ARGUMENTS="-Dfile.encoding=UTF-8 -XX:+TieredCompilation -Xmx4g"
-          export _JAVA_OPTIONS="-Djdk.util.zip.disableZip64ExtraFieldValidation=true -Djava.util.secureRandomSeed=true"
-          lunch ${{ env.MAKEFILE_NAME }}-userdebug
-
-          echo "Root cause confirmed by inspecting external/chromium_org/third_party/WebKit/Source/build/scripts/rule_bison.py directly (LineageOS/android_external_chromium_org_third_party_WebKit, cm-12.1 branch): after running bison, the script reads whichever header bison produced (X.cpp.h on old bison, X.hpp on modern bison), deletes it, and writes a NEW file named X.h with include guards added. This is not a race - a -j1 fully serial build reproduces the exact same failure every time. Modern bison (3.7+, confirmed on this runner's bison 3.8.2 via direct test: 'bison -d -o test.cpp' emits test.hpp AND auto-inserts #include \"test.hpp\" inside test.cpp itself) leaves CSSGrammar.cpp/XPathGrammar.cpp permanently referencing a header the script has already deleted and replaced under a different name (X.h). No amount of parallelism control fixes this; the .cpp file's own #include line is simply wrong for the header that ends up on disk."
-          echo "This device is TARGET_ARCH=arm64 with TARGET_2ND_ARCH=arm, so the WebKit generated-sources module is built twice: once for the primary 64-bit arch (module 'third_party_WebKit_Source_core_webcore_generated_gyp', output under obj/) and once for the secondary 32-bit arch (module 'third_party_WebKit_Source_core_webcore_generated_gyp_32', confirmed reachable as an independent make goal and confirmed by build logs to hit the identical header mismatch under obj_arm/). Both are fixed here, in a loop, before the main build ever reaches either."
-          echo "Fix per arch: let generation run once (compiling will predictably fail on CSSGrammar.o/XPathGrammar.o - that is expected and tolerated here), then create X.hpp -> X.h compatibility symlinks so the existing #include \"X.hpp\" directives resolve, then rebuild the same module - make is incremental, so already-generated sources are not regenerated and only the previously-failed compiles are retried, this time successfully."
-
-          fix_webkit_grammar_headers() {
-            local module_name="$1"
-            local obj_dir="$2"
-
-            echo "::group::Fixing ${module_name} (${obj_dir})"
-
-            make -j$(nproc --all) "${module_name}" || echo "Expected failure on first pass for ${module_name} (missing .hpp) - proceeding to apply header symlink fix"
-
-            local core_dir="out/target/product/${{ env.DEVICE_NAME }}/${obj_dir}/GYP/shared_intermediates/blink/core"
-            if [ ! -d "${core_dir}" ]; then
-              echo "ERROR: ${core_dir} does not exist - generation did not run at all for ${module_name}, this is a different failure than the confirmed header-naming bug"
-              exit 1
-            fi
-
-            for name in CSSGrammar XPathGrammar; do
-              if [ ! -f "${core_dir}/${name}.h" ]; then
-                echo "ERROR: ${core_dir}/${name}.h missing - rule_bison.py did not complete its expected final output for ${module_name}, this is a different failure than the confirmed header-naming bug"
-                exit 1
-              fi
-              ln -sf "${name}.h" "${core_dir}/${name}.hpp"
-              echo "symlinked ${core_dir}/${name}.hpp -> ${name}.h"
-            done
-
-            echo "Safety net: applying the same X.hpp -> X.h symlink fix to any other bison/GYP-generated file under ${obj_dir}/GYP/shared_intermediates/blink hitting the identical naming mismatch."
-            local blink_dir="out/target/product/${{ env.DEVICE_NAME }}/${obj_dir}/GYP/shared_intermediates/blink"
-            find "${blink_dir}" -name '*.h' | while read -r hfile; do
-              local hpp="${hfile%.h}.hpp"
-              if [ ! -e "${hpp}" ]; then
-                ln -sf "$(basename "${hfile}")" "${hpp}"
-                echo "symlinked missing header: ${hpp} -> $(basename "${hfile}")"
-              fi
-            done
-
-            echo "Rebuilding ${module_name} now that the headers resolve (full parallelism is fine here - the earlier -j1 restriction was based on a race theory that direct inspection of rule_bison.py has since disproven):"
-            make -j$(nproc --all) "${module_name}"
-
-            echo "::endgroup::"
-          }
-
-          fix_webkit_grammar_headers "third_party_WebKit_Source_core_webcore_generated_gyp" "obj"
-          fix_webkit_grammar_headers "third_party_WebKit_Source_core_webcore_generated_gyp_32" "obj_arm"
-
-      - name: Building LineageOS
-        working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-        run: |
-          source build/envsetup.sh
-          export ALLOW_MISSING_DEPENDENCIES=true
-          export LC_ALL=C
-          export JACK_SERVER_VM_ARGUMENTS="-Dfile.encoding=UTF-8 -XX:+TieredCompilation -Xmx4g"
-          export _JAVA_OPTIONS="-Djdk.util.zip.disableZip64ExtraFieldValidation=true -Djava.util.secureRandomSeed=true"
-          export WITH_DEXPREOPT=true
-          lunch ${{ env.MAKEFILE_NAME }}-userdebug
-
-          rm -rf out/target/product/${{ env.DEVICE_NAME }}/obj/APPS/webview_intermediates
-          rm -rf out/target/product/${{ env.DEVICE_NAME }}/obj/APPS/ChromeWebView_intermediates 2>/dev/null || true
-
-          retry_make() {
-            local max_attempts=3
-            local attempt=1
-            while [ "${attempt}" -le "${max_attempts}" ]; do
-              echo "::group::make attempt ${attempt}/${max_attempts}: $*"
-              if make "$@"; then
-                echo "::endgroup::"
-                return 0
-              fi
-              echo "::endgroup::"
-              echo "make failed on attempt ${attempt}/${max_attempts} for: $*"
-              if [ "${attempt}" -eq "${max_attempts}" ]; then
-                echo "ERROR: make did not succeed after ${max_attempts} attempts for: $*"
-                return 1
-              fi
-              echo "Retrying for general resilience (transient network/IO flakiness etc). Note: the CSSGrammar.hpp/XPathGrammar.hpp 'No such file or directory' failure some runs hit here is not transient - it is a confirmed rule_bison.py vs modern-bison header-naming mismatch, permanently fixed earlier in the 'Fix WebKit bison-generated header naming mismatch, both arches' step via X.hpp -> X.h symlinks (for both the primary and _32 secondary-arch modules) before this step ever runs, so this retry loop should not need to paper over it."
-              attempt=$((attempt + 1))
-            done
-            return 1
-          }
-
-          retry_make org.cyanogenmod.platform-res -j$(nproc --all)
-          retry_make webview -j$(nproc --all)
-          retry_make ${{ env.BUILD_TARGET }} -j$(nproc --all) WITH_DEXPREOPT=true
+    - name: Install repo
+      run: |
+        mkdir -p ~/bin
+        curl -sS https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+        chmod a+x ~/bin/repo
+        sudo ln -sf ~/bin/repo /usr/bin/repo
+        echo "repo installed to ~/bin/repo and /usr/bin/repo"
       
-      - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.DEVICE_NAME }}-${{ github.run_id }}
-          path: |
-            workspace/out/target/product/${{ env.DEVICE_NAME }}/lineage-*.zip
-            workspace/out/target/product/${{ env.DEVICE_NAME }}/boot.img
-            workspace/out/target/product/${{ env.DEVICE_NAME }}/recovery.img
-          retention-days: 14
-          if-no-files-found: error
+    - name: Initialize repo
+      env:
+        REPO_PYTHON: /usr/bin/python
+      run: |
+        mkdir workspace
+        cd workspace
+        echo "workspace-folder=$(pwd)" >> $GITHUB_OUTPUT
+        git config --global user.name "azwhikaru"
+        git config --global user.email "azwhikaru+37921907@github.com"
+        export REPO_PYTHON=/usr/bin/python
+        repo init --depth=1 -u ${{ env.MANIFEST_URL }} -b ${{ env.MANIFEST_BRANCH }}
+      id: pwd
+
+    - name: Repo Sync
+      env:
+        REPO_PYTHON: /usr/bin/python
+      run: |
+        export REPO_PYTHON=/usr/bin/python
+        repo sync -j$(nproc --all) --force-sync
+      working-directory: workspace
+
+    - name: Checkout Device Tree (clone the device tree repo separately)
+      run: |
+        # Clone device tree to a predictable location in the runner workspace
+        rm -rf $GITHUB_WORKSPACE/device-tree || true
+        git clone --depth=1 -b ${{ env.DEVICE_TREE_BRANCH }} ${{ env.DEVICE_TREE_URL }} $GITHUB_WORKSPACE/device-tree
+        ls -la $GITHUB_WORKSPACE/device-tree
+
+    - name: Copy device-tree into AOSP workspace device path (do NOT mv whole workspace)
+      run: |
+        WORKSPACE_DIR="${{ steps.pwd.outputs.workspace-folder }}"
+        TARGET_DIR="$WORKSPACE_DIR/${{ env.DEVICE_PATH }}"
+        echo "Workspace: $WORKSPACE_DIR"
+        echo "Target device path: $TARGET_DIR"
+        mkdir -p "$TARGET_DIR"
+        # use rsync to copy only the device tree contents into workspace/device/<...>
+        rsync -a --delete $GITHUB_WORKSPACE/device-tree/ "$TARGET_DIR/"
+        echo "Device tree copied to workspace device path"
+      env:
+        GITHUB_WORKSPACE: ${{ github.workspace }}
+        
+    - name: Set Swap Space
+      uses: pierotofy/set-swap-space@master
+      with:
+        swap-size-gb: 12
+        
+    - name: Configure CCACHE
+      run: |
+        export USE_CCACHE=1
+        export CCACHE_DIR=${{ github.workspace }}/.ccache
+        mkdir -p $CCACHE_DIR
+        ccache -M 50G || true
+
+    - name: Building recovery
+      run: |
+        source build/envsetup.sh
+        export ALLOW_MISSING_DEPENDENCIES=true
+        lunch ${{ env.MAKEFILE_NAME }}-eng
+        make clean
+        make ${{ env.BUILD_TARGET }}image -j$(nproc)
+      working-directory: workspace
+
+    - name: Upload to Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          workspace/out/target/product/${{ env.DEVICE_NAME }}/${{ env.BUILD_TARGET }}.img
+          workspace/out/target/product/${{ env.DEVICE_NAME }}/*.zip
+          workspace/out/target/product/${{ env.DEVICE_NAME }}/*vendor*.img
+        name: ${{ env.DEVICE_NAME }}-${{ github.run_id }}
+        tag_name: ${{ github.run_id }}
+        body: |
+          Manifest: ${{ env.MANIFEST_BRANCH }}
+          Device: ${{ env.DEVICE_NAME }}
+          Target: ${{ env.BUILD_TARGET }}.img
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
