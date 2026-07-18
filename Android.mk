@@ -8,12 +8,6 @@
 LOCAL_PATH := $(call my-dir)
 
 ifeq ($(TARGET_DEVICE),a03br)
-ALL_PREBUILT += $(INSTALLED_KERNEL_TARGET)
-KERNEL_OUT := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ
-
-$(KERNEL_OUT):
-	mkdir -p $(KERNEL_OUT)
-
 JAVA_SDK_ENFORCEMENT_ERROR := false
 include $(call all-subdir-makefiles,$(LOCAL_PATH))
 endif
