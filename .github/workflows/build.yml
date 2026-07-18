@@ -3,7 +3,7 @@ name: LineageOS
 on:
   push:
     branches:
-      - main
+      - mainj
   workflow_dispatch:
 
 env:
