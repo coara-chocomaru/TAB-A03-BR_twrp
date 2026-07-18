@@ -1,0 +1,15 @@
+/dev/block/platform/soc.1/by-name/MRD                 /mrd            emmc            rw,noatime,nodev,nodiratime      wait
+/dev/block/platform/soc.1/by-name/MRD1                /mrd1           emmc            rw,noatime,nodev,nodiratime      wait
+/dev/block/platform/soc.1/by-name/DTIM                /dtim           emmc            rw,noatime,nodev,nodiratime      wait
+/dev/block/platform/soc.1/by-name/recovery            /recovery       emmc            rw,noatime,nodev,nodiratime      wait
+/dev/block/platform/soc.1/by-name/bootloader          /bootloader     emmc            rw,noatime,nodev,nodiratime      wait
+/dev/block/platform/soc.1/by-name/boot                /boot           emmc            rw,noatime,nodev,nodiratime      wait
+/dev/block/platform/soc.1/by-name/system              /system         ext4            rw,noatime,nodev,nodiratime      wait
+/dev/block/platform/soc.1/by-name/misc                /misc           emmc            rw,noatime,nodev,nodiratime      wait
+/dev/block/platform/soc.1/by-name/radio               /radio          emmc            rw,noatime,nodev,nodiratime      wait
+/dev/block/platform/soc.1/by-name/NVM                 /nvm            ext4            rw,noatime,nodev,nodiratime      wait
+/dev/block/platform/soc.1/by-name/cache               /cache          ext4            rw,noatime,nodev,nodiratime      wait
+/dev/block/platform/soc.1/by-name/factory             /factory        ext4            rw,noatime,nodev,nodiratime      wait
+/dev/block/platform/soc.1/by-name/userdata            /data           ext4            rw,noatime,nodev,nodiratime      wait,length=-16384
+
+/dev/block/platform/soc.1/mmcblk1p1                   /sdcard         vfat            rw,noatime,nodev,nodiratime      wait
