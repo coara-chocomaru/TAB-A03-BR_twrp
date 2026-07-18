@@ -121,13 +121,19 @@ jobs:
       env:
         GITHUB_WORKSPACE: ${{ github.workspace }}
 
-    - name: Fix checkpolicy multiple definition
+    - name: Fix legacy build issues
       run: |
-        FILE="workspace/external/checkpolicy/checkpolicy.h"
-        if grep -q 'te_assertions' "$FILE"; then
-          sed -i 's/^.*te_assertions.*$/extern int te_assertions;/' "$FILE"
+        # checkpolicy multiple definition
+        FILE1="workspace/external/checkpolicy/checkpolicy.h"
+        if grep -q 'te_assertions' "$FILE1"; then
+          sed -i 's/^.*te_assertions.*$/extern int te_assertions;/' "$FILE1"
         fi
-        grep -n 'te_assertions' "$FILE" || true
+
+        # nullptr is not available in this legacy build setup
+        FILE2="workspace/bootable/recovery/partition.cpp"
+        sed -i 's/\bnullptr\b/NULL/g' "$FILE2"
+
+        grep -n 'te_assertions\|nullptr\|NULL' "$FILE1" "$FILE2" || true
 
     - name: Set Swap Space
       uses: pierotofy/set-swap-space@master
