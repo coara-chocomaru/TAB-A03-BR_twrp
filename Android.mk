@@ -9,8 +9,6 @@ LOCAL_PATH := $(call my-dir)
 
 ifeq ($(TARGET_DEVICE),a03br)
 JAVA_SDK_ENFORCEMENT_ERROR := false
-LOCAL_CFLAGS += -Os
-LOCAL_CPPFLAGS += -Os
 LOCAL_STRIP_MODULE := true
 include $(call all-subdir-makefiles,$(LOCAL_PATH))
 endif
