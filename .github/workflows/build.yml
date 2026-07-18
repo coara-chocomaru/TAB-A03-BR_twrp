@@ -1,3 +1,4 @@
+```yaml
 name: Recovery Build (Legacy)
 
 on:
@@ -14,7 +15,6 @@ env:
   DEVICE_NAME: 'a03br'
   MAKEFILE_NAME: 'omni_a03br'
   BUILD_TARGET: 'recovery'
-  COMMON_GLOBAL_CFLAGS: '-fcommon'
 
 jobs:
   build:
@@ -35,7 +35,6 @@ jobs:
         echo "Device Name: ${{ env.DEVICE_NAME }}"
         echo "Makefile Name: ${{ env.MAKEFILE_NAME }}"
         echo "Build Target: ${{ env.BUILD_TARGET }}.img"
-        echo "COMMON_GLOBAL_CFLAGS: ${{ env.COMMON_GLOBAL_CFLAGS }}"
         echo "::endgroup::"
 
     - name: Check Out
@@ -123,6 +122,14 @@ jobs:
       env:
         GITHUB_WORKSPACE: ${{ github.workspace }}
 
+    - name: Fix checkpolicy multiple definition
+      run: |
+        FILE="workspace/external/checkpolicy/checkpolicy.h"
+        if grep -q 'te_assertions' "$FILE"; then
+          sed -i 's/^.*te_assertions.*$/extern int te_assertions;/' "$FILE"
+        fi
+        grep -n 'te_assertions' "$FILE" || true
+
     - name: Set Swap Space
       uses: pierotofy/set-swap-space@master
       with:
@@ -160,3 +167,4 @@ jobs:
           Target: ${{ env.BUILD_TARGET }}.img
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
