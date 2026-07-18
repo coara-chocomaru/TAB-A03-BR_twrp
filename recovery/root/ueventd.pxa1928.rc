@@ -1,29 +1,6 @@
-/dev/snd/* 0660 system audio
-/dev/galcore 0660 root audio
-/dev/graphics/fb* 0660 graphics graphics
-/dev/graphics/galcore 0666 graphics graphics
-/dev/media0 0660 root camera
-/dev/uio3   0660 root camera
-/dev/video* 0660 root camera
-/dev/v4l-subdev* 0660 root camera
-/dev/uio0 0660 media system
-/dev/uio1 0660 media system
-/dev/uio2 0660 media system
-/dev/ire 0660 root graphics
-/dev/rfkill 0660 system wifi
-/dev/tzdd 0660 system drmrpc
-/dev/i2c-5 0660 media media
 /sys/devices/virtual/input/input* active 0660 root input
 /sys/devices/virtual/input/input* interval 0660 root input
 /sys/devices/virtual/input/input* wake 0660 root input
-/dev/input/event* 0660 system input
-/dev/ttyACM* 0660 radio radio
-/dev/ion 0666 system media
-/dev/mbtchar* 0660 system net_bt_stack
-/dev/st21nfca 0600 nfc nfc
-/dev/ttyS0 0600 system system
-/dev/alarm-poweroff 0660 system system
-/dev/block/platform/soc.1/by-name/persistent 0600 system system
 
 # cpufreq
 # cpufreq customize governor parameters
@@ -55,16 +32,3 @@
 /sys/devices/system/cpu/cpufreq interactive/timer_rate 0644 system root
 /sys/devices/system/cpu/cpufreq interactive/timer_slack 0644 system root
 /sys/devices/system/cpu/cpufreq interactive/io_is_busy 0644 system root
-
-# MRD partition
-/dev/block/mmcblk0p1 0660 system system
-# MRD backup partition
-/dev/block/mmcblk0p2 0660 system system
-/dev/cpmem 0660 system root
-# radio partition
-/dev/block/mmcblk0p11 0600 system root
-/dev/mpu 0660 system system
-/dev/mpuirq 0660 system system
-/dev/accelirq 0660 system system
-/dev/timerirq 0660 system system
-
