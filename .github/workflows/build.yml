@@ -139,6 +139,13 @@ jobs:
       uses: pierotofy/set-swap-space@master
       with:
         swap-size-gb: 12
+        
+    - name: Remove unused language files
+      run: |
+             cd workspace
+             find bootable/recovery/gui/theme/common/languages/ \
+             -name "*.xml" ! -name "ja.xml" ! -name "en.xml" -delete
+
 
     - name: Configure CCACHE
       run: |
