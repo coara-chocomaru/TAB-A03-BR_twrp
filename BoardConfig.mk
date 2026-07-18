@@ -7,17 +7,6 @@ TARGET_SOC := pxa1928
 TARGET_BOARD_PLATFORM := mrvl
 BOARD_USES_MRVL_HARDWARE := true
 
-TARGET_PROVIDES_INIT := true
-TARGET_PROVIDES_INIT_TARGET_RC := true
-
-
-ENABLE_WEBGL := true
-BOARD_USE_SKIA_LCDTEXT := true
-BOARD_NEEDS_CUTILS_LOG := true
-BOARD_HAVE_PIXEL_FORMAT_INFO := true
-BOARD_USES_HWCOMPOSER := true
-
-
 # build option
 #　BUILD_BROKEN_DUP_RULES := true
 BOARD_NO_RECOVERY_PATCH := true
@@ -43,32 +32,10 @@ BOARD_SUPPORTS_SOUND_TRIGGER := false
 WITHOUT_CHECK_API := true
 MALLOC_SVELTE := true
 
-BOARD_BLUETOOTH_BDROID_BUILDCFG_INCLUDE_DIR := device/sts/a03br/bluetooth
-BOARD_HAVE_BLUETOOTH := true
-BOARD_HAVE_BLUETOOTH_MRVL := true
-
-
-BOARD_WLAN_VENDOR := MRVL
-WIFI_DRIVER_MODULE_PATH := "/lib/modules/sd8801.ko"
-WIFI_DRIVER_MODULE_NAME	:= "sd8801"
-WIFI_DRIVER_MODULE_ARG := "firmware_path=/system/etc/firmware/mrvl/sd8801_uapsta.bin cfg80211_wext=12 sta_name=wlan uap_name=wlan wfd_name=p2p fw_name=mrvl/sd8801_uapsta.bin"
-WIFI_DRIVER_FW_PATH_PARAM := "/sys/module/sd8801/parameters/firmware_path"
-WIFI_DRIVER_FW_PATH_STA := "/system/etc/firmware/mrvl/sd8801_uapsta.bin"
-WIFI_DRIVER_FW_PATH_AP := "/system/etc/firmware/mrvl/sd8801_uapsta.bin"
-WIFI_DRIVER_FW_PATH_P2P := "/system/etc/firmware/mrvl/sd8801_uapsta.bin"
-WIFI_SDIO_IF_DRIVER_MODULE_PATH := "/lib/modules/mlan8801.ko"
-WIFI_SDIO_IF_DRIVER_MODULE_NAME := "mlan8801"
-WIFI_SDIO_IF_DRIVER_MODULE_ARG := ""
-MRVL_WIRELESS_DAEMON_API := true
-
 # key
 TARGET_PROVIDES_KEYMASTER := false
 BOARD_USE_SOFT_GATEKEEPER := true
 
-# dex2oat
-WITH_DEXPREOPT := true
-WITH_DEXPREOPT_PIC := true
-USE_DEX2OAT_DEBUG := false
 
 # Architecture
 TARGET_ARCH := arm64
@@ -92,13 +59,6 @@ TARGET_CPU_ABI_LIST := $(TARGET_CPU_ABI_LIST_64_BIT),$(TARGET_CPU_ABI_LIST_32_BI
 ARCH_ARM_HAVE_TLS_REGISTER := true
 TARGET_CPU_MEMCPY_OPT_DISABLE := true
 
-#oat
-DEX2OAT_TARGET_ARCH := arm64
-DEX2OAT_TARGET_CPU_VARIANT := generic
-DEX2OAT_TARGET_CPU_VARIANT_RUNTIME := default
-DEX2OAT_TARGET_INSTRUCTION_SET_FEATURES := default
-
-
 #ota
 AB_OTA_UPDATER := false
 
@@ -118,9 +78,6 @@ USE_OPENGL_RENDERER := true
 EXTENDED_FONT_FOOTPRINT := true
 VSYNC_EVENT_PHASE_OFFSET_NS := 0
 BOARD_USE_BGRA_8888 := true
-
-# audio
-BOARD_USES_ALSA_AUDIO := true
 
 
 #prop
@@ -185,10 +142,10 @@ TARGET_RECOVERY_DEVICE_DIRS += $(DEVICE_PATH)
 # Security patch level
 # VENDOR_SECURITY_PATCH := 2018-03-05
 
-include vendor/sts/a03br/BoardConfigVendor.mk
+# include vendor/sts/a03br/BoardConfigVendor.mk
 
 # SELinux
 #BOARD_SEPOLICY_DIRS := \
 	#$(DEVICE_PATH)/sepolicy/
 #BOARD_SECCOMP_POLICY += $(DEVICE_PATH)/seccomp_policy
-#SELINUX_IGNORE_NEVERALLOWS := true
+SELINUX_IGNORE_NEVERALLOWS := true
