@@ -205,7 +205,7 @@ jobs:
           echo "timestamps:"
           ls -la "${DEX2OAT_BIN}" "${DEX2OAT_REAL}"
                   
-      - name: Pre-build WebKit generated-sources module serially (avoid rule_bison.py race)
+      - name: Fix WebKit bison-generated header naming mismatch (rule_bison.py vs modern bison)
         working-directory: ${{ steps.pwd.outputs.workspace-folder }}
         run: |
           source build/envsetup.sh
@@ -215,33 +215,38 @@ jobs:
           export _JAVA_OPTIONS="-Djdk.util.zip.disableZip64ExtraFieldValidation=true -Djava.util.secureRandomSeed=true"
           lunch ${{ env.MAKEFILE_NAME }}-userdebug
 
-          echo "external/chromium_org/third_party/WebKit/Source/build/scripts/rule_bison.py is invoked once for CSSGrammar.y and once for XPathGrammar.y as GENERATED_SOURCES of the third_party_WebKit_Source_core_webcore_generated_gyp static-library module, and both write into the same shared_intermediates/blink/core directory. Under parallel make (-j) these two invocations run concurrently and race, silently dropping one generated .hpp side-effect file with no error at generation time. Because the .cpp file itself is unaffected and its mtime ends up newer than the .y source, make considers that target up to date on every later build or retry and never re-runs the generation recipe, so the missing .hpp persists permanently once it happens - retries cannot fix it."
-          echo "A prior attempt tried to request the generated .cpp file paths directly as make goals, but that failed with 'No rule to make target' - the GYP-derived build rules in this checked-in-from-upstream Makefile tree are not reliably reachable as bare file targets outside the owning module's own dependency walk. Instead, build the actual known-valid module name (confirmed from the build log: 'third_party_WebKit_Source_core_webcore_generated_gyp') with -j1 so every recipe inside it, including both bison invocations, executes strictly one at a time - this removes the race entirely, at the cost of that one module taking longer to build serially."
+          echo "Root cause confirmed by inspecting external/chromium_org/third_party/WebKit/Source/build/scripts/rule_bison.py directly (LineageOS/android_external_chromium_org_third_party_WebKit, cm-12.1 branch): after running bison, the script reads whichever header bison produced (X.cpp.h on old bison, X.hpp on modern bison), deletes it, and writes a NEW file named X.h with include guards added. This is not a race - a -j1 fully serial build reproduces the exact same failure every time. Modern bison (3.7+, confirmed on this runner's bison 3.8.2 via direct test: 'bison -d -o test.cpp' emits test.hpp AND auto-inserts #include \"test.hpp\" inside test.cpp itself) leaves CSSGrammar.cpp/XPathGrammar.cpp permanently referencing a header the script has already deleted and replaced under a different name (X.h). No amount of parallelism control fixes this; the .cpp file's own #include line is simply wrong for the header that ends up on disk."
+          echo "Fix: let generation run once (compiling will predictably fail on CSSGrammar.o/XPathGrammar.o - that is expected and tolerated here), then create X.hpp -> X.h compatibility symlinks so the existing #include \"X.hpp\" directives resolve, then rebuild the same module - make is incremental, so already-generated sources are not regenerated and only the previously-failed compiles are retried, this time successfully."
 
-          make -j1 third_party_WebKit_Source_core_webcore_generated_gyp
+          make -j$(nproc --all) third_party_WebKit_Source_core_webcore_generated_gyp || echo "Expected failure on first pass (missing .hpp) - proceeding to apply header symlink fix"
 
-          echo "Verifying the generated grammar headers exist after serial module build:"
-          for f in \
-            "out/target/product/${{ env.DEVICE_NAME }}/obj/GYP/shared_intermediates/blink/core/CSSGrammar.hpp" \
-            "out/target/product/${{ env.DEVICE_NAME }}/obj/GYP/shared_intermediates/blink/core/XPathGrammar.hpp"; do
-            if [ ! -f "$f" ]; then
-              echo "ERROR: expected generated header missing after serial pre-build: $f"
+          CORE_DIR="out/target/product/${{ env.DEVICE_NAME }}/obj/GYP/shared_intermediates/blink/core"
+          if [ ! -d "${CORE_DIR}" ]; then
+            echo "ERROR: ${CORE_DIR} does not exist - generation did not run at all, this is a different failure than the confirmed header-naming bug"
+            exit 1
+          fi
+
+          for name in CSSGrammar XPathGrammar; do
+            if [ ! -f "${CORE_DIR}/${name}.h" ]; then
+              echo "ERROR: ${CORE_DIR}/${name}.h missing - rule_bison.py did not complete its expected final output, this is a different failure than the confirmed header-naming bug"
               exit 1
             fi
-            echo "OK: $f"
+            ln -sf "${name}.h" "${CORE_DIR}/${name}.hpp"
+            echo "symlinked ${CORE_DIR}/${name}.hpp -> ${name}.h"
           done
 
-          echo "Safety net: scanning shared_intermediates/blink for any other .h generated without its .hpp counterpart (same class of rule_bison.py race, in case other grammar-derived files are affected), and symlinking them so a stray one does not silently break the later parallel build."
+          echo "Safety net: applying the same X.hpp -> X.h symlink fix to any other bison/GYP-generated file under shared_intermediates/blink hitting the identical naming mismatch."
           BLINK_DIR="out/target/product/${{ env.DEVICE_NAME }}/obj/GYP/shared_intermediates/blink"
-          if [ -d "${BLINK_DIR}" ]; then
-            find "${BLINK_DIR}" -name '*.cpp' | while read -r cppfile; do
-              base="${cppfile%.cpp}"
-              if [ -f "${base}.h" ] && [ ! -e "${base}.hpp" ]; then
-                ln -s "$(basename "${base}.h")" "${base}.hpp"
-                echo "symlinked missing header: ${base}.hpp -> $(basename "${base}.h")"
-              fi
-            done
-          fi
+          find "${BLINK_DIR}" -name '*.h' | while read -r hfile; do
+            hpp="${hfile%.h}.hpp"
+            if [ ! -e "${hpp}" ]; then
+              ln -sf "$(basename "${hfile}")" "${hpp}"
+              echo "symlinked missing header: ${hpp} -> $(basename "${hfile}")"
+            fi
+          done
+
+          echo "Rebuilding the module now that the headers resolve (full parallelism is fine here - the earlier -j1 restriction was based on a race theory that direct inspection of rule_bison.py has since disproven):"
+          make -j$(nproc --all) third_party_WebKit_Source_core_webcore_generated_gyp
 
       - name: Building LineageOS
         working-directory: ${{ steps.pwd.outputs.workspace-folder }}
@@ -272,7 +277,7 @@ jobs:
                 echo "ERROR: make did not succeed after ${max_attempts} attempts for: $*"
                 return 1
               fi
-              echo "external/chromium_org/third_party/WebKit/Source/build/scripts/rule_bison.py runs CSSGrammar.y and XPathGrammar.y concurrently under -j builds, writing into the same shared_intermediates/blink/core directory. This has a known file-clobbering race that can silently drop the generated .hpp with no error at generation time, only surfacing later at compile time. Retrying: make is incremental, so already-up-to-date generated sources are not rebuilt, and the previously-clobbered file is regenerated in isolation this time."
+              echo "Retrying for general resilience (transient network/IO flakiness etc). Note: the CSSGrammar.hpp/XPathGrammar.hpp 'No such file or directory' failure some runs hit here is not transient - it is a confirmed rule_bison.py vs modern-bison header-naming mismatch, permanently fixed earlier in the 'Fix WebKit bison-generated header naming mismatch' step via X.hpp -> X.h symlinks before this step ever runs, so this retry loop should not need to paper over it."
               attempt=$((attempt + 1))
             done
             return 1
