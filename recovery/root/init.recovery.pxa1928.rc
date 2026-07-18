@@ -1,3 +1,4 @@
+import /init.pxa1928.usb.rc
 on early-init
     mkdir /tmp
 
