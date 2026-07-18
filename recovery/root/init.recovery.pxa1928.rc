@@ -1,6 +1,0 @@
-import /init.pxa1928.usb.rc
-on early-init
-
-    # set SEAndroid permissive mode at init
-    setenforce 0
-
