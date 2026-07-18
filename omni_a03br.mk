@@ -4,15 +4,15 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-$(call inherit-product, $(SRC_TARGET_DIR)/product/full_base.mk)
+# $(call inherit-product, $(SRC_TARGET_DIR)/product/full_base.mk)
 
-$(call inherit-product, $(SRC_TARGET_DIR)/product/languages_full.mk)
+# $(call inherit-product, $(SRC_TARGET_DIR)/product/languages_full.mk)
 $(call inherit-product, $(SRC_TARGET_DIR)/product/core_64_bit.mk)
 $(call inherit-product, device/sts/a03br/device.mk)
 
 PRODUCT_DEVICE := a03br
-PRODUCT_NAME := lineage_a03br
-PRODUCT_RELEASE_NAME := lineage_a03br
+PRODUCT_NAME := omni_a03br
+PRODUCT_RELEASE_NAME := omni_a03br
 PRODUCT_BRAND := benesse
 PRODUCT_MODEL := TAB-A03-BR
 PRODUCT_MANUFACTURER := STS-TOTTORI
