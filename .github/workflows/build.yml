@@ -14,6 +14,7 @@ env:
   DEVICE_NAME: 'a03br'
   MAKEFILE_NAME: 'omni_a03br'
   BUILD_TARGET: 'recovery'
+  COMMON_GLOBAL_CFLAGS: '-fcommon'
 
 jobs:
   build:
@@ -21,6 +22,7 @@ jobs:
     runs-on: ubuntu-22.04
     permissions:
       contents: write
+
     steps:
     - name: Display Run Parameters
       run: |
@@ -33,6 +35,7 @@ jobs:
         echo "Device Name: ${{ env.DEVICE_NAME }}"
         echo "Makefile Name: ${{ env.MAKEFILE_NAME }}"
         echo "Build Target: ${{ env.BUILD_TARGET }}.img"
+        echo "COMMON_GLOBAL_CFLAGS: ${{ env.COMMON_GLOBAL_CFLAGS }}"
         echo "::endgroup::"
 
     - name: Check Out
@@ -46,7 +49,6 @@ jobs:
         sudo apt update
         sudo apt -y upgrade
 
-        # Essential build packages (kept your original list, added rsync/curl and python2 tools)
         sudo apt -y install \
           gperf gcc-multilib gcc-10-multilib g++-multilib g++-10-multilib libc6-dev \
           lib32ncurses5-dev x11proto-core-dev libx11-dev tree lib32z-dev libgl1-mesa-dev libxml2-utils \
@@ -55,11 +57,9 @@ jobs:
           libbz2-dev lzma ncftp qemu-user-static libstdc++-10-dev libncurses5 rsync curl unzip \
           python2
 
-        # Ensure `python` points to python2 (so repo and old scripts run)
         sudo update-alternatives --install /usr/bin/python python /usr/bin/python2 1 || true
         python --version
 
-        # Ensure ~/bin exists for repo binary
         mkdir -p ~/bin
         echo "Prepared environment"
 
@@ -83,10 +83,11 @@ jobs:
         chmod a+x ~/bin/repo
         sudo ln -sf ~/bin/repo /usr/bin/repo
         echo "repo installed to ~/bin/repo and /usr/bin/repo"
-      
+
     - name: Initialize repo
       env:
         REPO_PYTHON: /usr/bin/python
+      id: pwd
       run: |
         mkdir workspace
         cd workspace
@@ -95,7 +96,6 @@ jobs:
         git config --global user.email "azwhikaru+37921907@github.com"
         export REPO_PYTHON=/usr/bin/python
         repo init --depth=1 -u ${{ env.MANIFEST_URL }} -b ${{ env.MANIFEST_BRANCH }}
-      id: pwd
 
     - name: Repo Sync
       env:
@@ -107,7 +107,6 @@ jobs:
 
     - name: Checkout Device Tree (clone the device tree repo separately)
       run: |
-        # Clone device tree to a predictable location in the runner workspace
         rm -rf $GITHUB_WORKSPACE/device-tree || true
         git clone --depth=1 -b ${{ env.DEVICE_TREE_BRANCH }} ${{ env.DEVICE_TREE_URL }} $GITHUB_WORKSPACE/device-tree
         ls -la $GITHUB_WORKSPACE/device-tree
@@ -119,17 +118,16 @@ jobs:
         echo "Workspace: $WORKSPACE_DIR"
         echo "Target device path: $TARGET_DIR"
         mkdir -p "$TARGET_DIR"
-        # use rsync to copy only the device tree contents into workspace/device/<...>
         rsync -a --delete $GITHUB_WORKSPACE/device-tree/ "$TARGET_DIR/"
         echo "Device tree copied to workspace device path"
       env:
         GITHUB_WORKSPACE: ${{ github.workspace }}
-        
+
     - name: Set Swap Space
       uses: pierotofy/set-swap-space@master
       with:
         swap-size-gb: 12
-        
+
     - name: Configure CCACHE
       run: |
         export USE_CCACHE=1
@@ -141,6 +139,7 @@ jobs:
       run: |
         source build/envsetup.sh
         export ALLOW_MISSING_DEPENDENCIES=true
+        export COMMON_GLOBAL_CFLAGS="-fcommon"
         lunch ${{ env.MAKEFILE_NAME }}-eng
         make clean
         make ${{ env.BUILD_TARGET }}image -j$(nproc)
