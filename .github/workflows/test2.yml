@@ -200,6 +200,19 @@ jobs:
         make clean
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
+    - name: Build host libselinux alone for debugging
+      run: |
+        source build/envsetup.sh
+        lunch ${{ env.MAKEFILE_NAME }}-eng
+        make -j1 libselinux 2>&1 | tee libselinux_build.log
+        if [ ${PIPESTATUS[0]} -ne 0 ]; then
+          echo "===== libselinux build failed. Full log: ====="
+          cat libselinux_build.log
+          exit 1
+        fi
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+      continue-on-error: true
+
     - name: Prebuild host dependencies (checkpolicy)
       run: |
         source build/envsetup.sh
