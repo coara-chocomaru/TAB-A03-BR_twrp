@@ -81,11 +81,6 @@ jobs:
             --exclude=.github \
             ./ "/work/src/${DEVICE_PATH}/"
 
-      - name: Remove unused languages
-        working-directory: /work/src
-        run: |
-          find bootable/recovery/gui/theme/common/languages/ \
-            -name "*.xml" ! -name "ja.xml" ! -name "en.xml" -delete
 
       - name: Temporary exclusions for legacy TWRP
         working-directory: /work/src
