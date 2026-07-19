@@ -51,8 +51,9 @@ jobs:
             ccache lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev \
             libsdl1.2-dev libwxgtk3.0-gtk3-dev libxml2 lzop pngcrush \
             schedtool squashfs-tools imagemagick libbz2-dev lzma ncftp \
-            qemu-user-static libstdc++-10-dev python2 openjdk-8-jdk
-          ln -sf /usr/bin/python2 /usr/bin/python || true
+            qemu-user-static libstdc++-10-dev python2 openjdk-8-jdk \
+            make build-essential
+            ln -sf /usr/bin/python2 /usr/bin/python || true
 
       - name: Install repo
         run: |
