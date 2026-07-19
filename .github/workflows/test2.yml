@@ -175,18 +175,19 @@ jobs:
         echo 'te_assert_t *te_assertions;' >> external/checkpolicy/checkpolicy.c
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
-    - name: Prebuild host libpcre
+    - name: Prebuild libpcre
       run: |
         source build/envsetup.sh
         lunch ${{ env.MAKEFILE_NAME }}-eng
-        make host-libpcre -j$(nproc --all)
+        make libpcre -j$(nproc --all)
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-
+      
     - name: Building recovery
       run: |
         source build/envsetup.sh
         export ALLOW_MISSING_DEPENDENCIES=true
-        lunch ${{ env.MAKEFILE_NAME }}-eng && make clean && make ${{ env.BUILD_TARGET }}image -j$(nproc --all)
+        lunch ${{ env.MAKEFILE_NAME }}-eng
+        make ${{ env.BUILD_TARGET }}image -j$(nproc --all)
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
     - name: Upload to Release
