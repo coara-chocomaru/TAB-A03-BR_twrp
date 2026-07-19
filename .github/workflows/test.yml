@@ -32,7 +32,7 @@ jobs:
         echo "Makefile Name: ${{ env.MAKEFILE_NAME }}"
         echo "Build Target: ${{ env.BUILD_TARGET }}.img"
         echo "::endgroup::"
- 
+
     - name: Check Out
       uses: actions/checkout@v3
 
@@ -68,7 +68,7 @@ jobs:
         curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
         chmod a+x ~/bin/repo
         sudo ln -sf ~/bin/repo /usr/bin/repo
-      
+
     - name: Initialize repo
       run: |
         mkdir workspace
@@ -78,12 +78,12 @@ jobs:
         git config --global user.email "azwhikaru+37921907@github.com"
         repo init --depth=1 -u ${{ env.MANIFEST_URL }} -b ${{ env.MANIFEST_BRANCH }}
       id: pwd
-          
+
     - name: Repo Sync
       run: |
         repo sync -j$(nproc --all) --force-sync
       working-directory: workspace
-      
+
     - name: Move files to workspace
       run: |
         mkdir -p workspace/${{ env.DEVICE_PATH }}
@@ -113,6 +113,11 @@ jobs:
              cd workspace
              find bootable/recovery/gui/theme/common/languages/ \
              -name "*.xml" ! -name "ja.xml" ! -name "en.xml" -delete
+
+    - name: Fix GCC10+ fno-common host build failure
+      run: |
+        echo 'HOST_GLOBAL_CFLAGS += -fcommon' >> build/core/combo/HOST_linux-x86.mk
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
     - name: Building recovery
       run: |
