@@ -180,7 +180,7 @@ jobs:
         sed -i 's/^te_assert_t \*te_assertions;/extern te_assert_t *te_assertions;/' external/checkpolicy/checkpolicy.h
         echo 'te_assert_t *te_assertions;' >> external/checkpolicy/checkpolicy.c
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-）
+
     - name: Clean build directory
       run: |
         source build/envsetup.sh
