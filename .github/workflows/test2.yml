@@ -164,16 +164,12 @@ jobs:
              find bootable/recovery/gui/theme/common/languages/ \
              -name "*.xml" ! -name "ja.xml" ! -name "en.xml" -delete
 
-    - name: Patch libselinux Android.mk (Force remove WHOLE static linkage)
+    - name: Patch libselinux Android.mk (Force remove WHOLE)
       run: |
         cd external/libselinux
         sed -i '/LOCAL_WHOLE_STATIC_LIBRARIES/d' Android.mk
-        echo 'LOCAL_STATIC_LIBRARIES += libpcre' >> Android.mk
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-
-    - name: Remove stale host libselinux intermediates to force rebuild
-      run: |
-        rm -rf out/host/linux-x86/obj32/STATIC_LIBRARIES/libselinux_intermediates
+        sed -i '/^LOCAL_STATIC_LIBRARIES/d' Android.mk
+        echo 'LOCAL_STATIC_LIBRARIES := libpcre' >> Android.mk
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
     - name: Verify libselinux patch
@@ -193,27 +189,14 @@ jobs:
         echo 'te_assert_t *te_assertions;' >> external/checkpolicy/checkpolicy.c
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
-    - name: Clean build directory
+    - name: Clean build directory (before prebuild)
       run: |
         source build/envsetup.sh
         lunch ${{ env.MAKEFILE_NAME }}-eng
         make clean
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
-    - name: Build host libselinux alone for debugging
-      run: |
-        source build/envsetup.sh
-        lunch ${{ env.MAKEFILE_NAME }}-eng
-        make -j1 libselinux 2>&1 | tee libselinux_build.log
-        if [ ${PIPESTATUS[0]} -ne 0 ]; then
-          echo "===== libselinux build failed. Full log: ====="
-          cat libselinux_build.log
-          exit 1
-        fi
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-      continue-on-error: true
-
-    - name: Prebuild host dependencies (checkpolicy)
+    - name: Prebuild host dependencies (libpcre, libselinux, checkpolicy)
       run: |
         source build/envsetup.sh
         lunch ${{ env.MAKEFILE_NAME }}-eng
