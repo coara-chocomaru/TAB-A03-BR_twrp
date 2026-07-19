@@ -179,8 +179,6 @@ jobs:
       run: |
         echo 'TARGET_GLOBAL_CPPFLAGS += -std=gnu++11' >> build/core/combo/TARGET_linux-arm64.mk
         echo 'TARGET_GLOBAL_CPPFLAGS += -std=gnu++11' >> build/core/combo/TARGET_linux-arm.mk
-        echo 'TARGET_GLOBAL_CPPFLAGS += -Wno-error=literal-suffix' >> build/core/combo/TARGET_linux-arm64.mk
-        echo 'TARGET_GLOBAL_CPPFLAGS += -Wno-error=literal-suffix' >> build/core/combo/TARGET_linux-arm.mk
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
     - name: Building recovery
