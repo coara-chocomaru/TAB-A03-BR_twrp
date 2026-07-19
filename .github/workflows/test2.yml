@@ -113,6 +113,35 @@ jobs:
         echo "::endgroup::"
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
+    - name: Patch BoardConfig with the correct exclusion flags
+      run: |
+        cd ${{ env.DEVICE_PATH }}
+        if grep -q '^BOARD_HAS_NO_REAL_SDCARD' BoardConfig.mk; then
+          sed -i 's/^BOARD_HAS_NO_REAL_SDCARD.*/BOARD_HAS_NO_REAL_SDCARD := true/' BoardConfig.mk
+        else
+          echo 'BOARD_HAS_NO_REAL_SDCARD := true' >> BoardConfig.mk
+        fi
+        if grep -q '^TW_NO_EXFAT ' BoardConfig.mk || grep -q '^TW_NO_EXFAT:' BoardConfig.mk; then
+          sed -i 's/^TW_NO_EXFAT .*/TW_NO_EXFAT := true/' BoardConfig.mk
+        else
+          echo 'TW_NO_EXFAT := true' >> BoardConfig.mk
+        fi
+        echo "::group::Patched flags"
+        grep -E '^(BOARD_HAS_NO_REAL_SDCARD|TW_NO_EXFAT|TW_NO_EXFAT_FUSE|TW_EXCLUDE_TWRPAPP)' BoardConfig.mk
+        echo "::endgroup::"
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
+    - name: Locate TWRPApp addition point (recursive search)
+      run: |
+        echo "::group::Recursive search for TWRPApp / twrpapp / privapp-permissions-twrpapp"
+        grep -rln "TWRPApp\|twrpapp" --include="*.mk" . 2>/dev/null | grep -v "^\./out/" || echo "no .mk match anywhere in tree"
+        echo "::endgroup::"
+
+        echo "::group::PRODUCT_PACKAGES containing twrpapp (any file type)"
+        grep -rln "PRODUCT_PACKAGES" --include="*.mk" bootable/recovery vendor/omni device 2>/dev/null | xargs grep -l "twrpapp" 2>/dev/null || echo "not found via PRODUCT_PACKAGES scan"
+        echo "::endgroup::"
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
     - name: Diagnose actual bootable/recovery source for these binaries
       run: |
         echo "::group::bootable/recovery remote and revision info"
@@ -148,6 +177,17 @@ jobs:
         echo "::group::libcrypto.so consumers (reverse dependency check)"
         grep -rln "libcrypto" bootable/recovery/*/Android.mk 2>/dev/null || echo "no direct libcrypto references found under bootable/recovery"
         echo "::endgroup::"
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
+    - name: Patch Android.mk to drop unconditional FAT tools (fsck.fat/fatlabel/mkfs.fat)
+      run: |
+        cd bootable/recovery
+        cp Android.mk Android.mk.bak
+        sed -i '/^\s*fsck\.fat \\$/d; /^\s*fatlabel \\$/d; /^\s*mkfs\.fat \\$/d' Android.mk
+        echo "::group::Diff after patch"
+        diff -u Android.mk.bak Android.mk || true
+        echo "::endgroup::"
+        rm -f Android.mk.bak
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
     - name: Clone common tree
