@@ -119,6 +119,12 @@ jobs:
         echo 'HOST_GLOBAL_CFLAGS += -fcommon' >> build/core/combo/HOST_linux-x86.mk
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
+    - name: Patch checkpolicy.h to fix GCC10+ multiple definition error
+      run: |
+        sed -i 's/^te_assert_t \*te_assertions;/extern te_assert_t *te_assertions;/' external/checkpolicy/checkpolicy.h
+        echo 'te_assert_t *te_assertions;' >> external/checkpolicy/checkpolicy.c
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
     - name: Building recovery
       run: |
         source build/envsetup.sh
