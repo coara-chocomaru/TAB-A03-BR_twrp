@@ -84,34 +84,10 @@ jobs:
         repo sync -j$(nproc --all) --force-sync
       working-directory: workspace
 
-    - name: Verify repo sync completeness
-      run: |
-        MISSING=0
-        for p in external/sgdisk external/exfat external/fsck_msdos external/fuse bootable/recovery system/vold; do
-          if [ ! -d "$p" ] || [ -z "$(ls -A "$p" 2>/dev/null)" ]; then
-            echo "MISSING PROJECT: $p"
-            MISSING=1
-          else
-            echo "OK PROJECT: $p"
-          fi
-        done
-        if [ "$MISSING" -eq 1 ]; then
-          echo "::warning::repo sync で一部プロジェクトが空、または未取得です。manifest.xml と local_manifests を確認してください。"
-        fi
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-
     - name: Move files to workspace
       run: |
         mkdir -p workspace/${{ env.DEVICE_PATH }}
         ls | grep -v workspace | xargs -I{} mv {} workspace/${{ env.DEVICE_PATH }}
-
-    - name: Show current BoardConfig exclusion flags
-      run: |
-        cd ${{ env.DEVICE_PATH }}
-        echo "::group::Current TW_ / exclusion related flags"
-        grep -E '^(TW_|BOARD_HAS_NO)' BoardConfig.mk || true
-        echo "::endgroup::"
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
     - name: Patch BoardConfig with the correct exclusion flags
       run: |
@@ -126,79 +102,12 @@ jobs:
         else
           echo 'TW_NO_EXFAT := true' >> BoardConfig.mk
         fi
-        echo "::group::Patched flags"
-        grep -E '^(BOARD_HAS_NO_REAL_SDCARD|TW_NO_EXFAT|TW_NO_EXFAT_FUSE|TW_EXCLUDE_TWRPAPP)' BoardConfig.mk
-        echo "::endgroup::"
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-
-    - name: Locate TWRPApp addition point (recursive search)
-      run: |
-        echo "::group::Recursive search for TWRPApp / twrpapp / privapp-permissions-twrpapp"
-        grep -rln "TWRPApp\|twrpapp" --include="*.mk" . 2>/dev/null | grep -v "^\./out/" || echo "no .mk match anywhere in tree"
-        echo "::endgroup::"
-
-        echo "::group::PRODUCT_PACKAGES containing twrpapp (any file type)"
-        grep -rln "PRODUCT_PACKAGES" --include="*.mk" bootable/recovery vendor/omni device 2>/dev/null | xargs grep -l "twrpapp" 2>/dev/null || echo "not found via PRODUCT_PACKAGES scan"
-        echo "::endgroup::"
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-
-    - name: Diagnose actual bootable/recovery source for these binaries
-      run: |
-        echo "::group::bootable/recovery remote and revision info"
-        git -C bootable/recovery remote -v 2>/dev/null || echo "bootable/recovery is not a git repo or missing"
-        git -C bootable/recovery log -1 2>/dev/null || true
-        echo "::endgroup::"
-
-        echo "::group::twrp-extras.xml presence in manifest"
-        find .repo -iname "twrp-extras.xml" 2>/dev/null || echo "twrp-extras.xml not found in synced manifest"
-        echo "::endgroup::"
-
-        echo "::group::fsck.fat / mkfs.fat reference in Android.mk"
-        grep -n "fsck.fat\|mkfs.fat\|fatlabel" bootable/recovery/Android.mk 2>/dev/null || echo "Android.mk not found or no match"
-        echo "::endgroup::"
-
-        echo "::group::TW_EXCLUDE_TWRPAPP reference in Android.mk"
-        grep -n "TW_EXCLUDE_TWRPAPP" bootable/recovery/Android.mk 2>/dev/null || echo "no match"
-        echo "::endgroup::"
-
-        echo "::group::TWRPApp package reference (product makefiles)"
-        grep -rn "TWRPApp\|twrpapp" bootable/recovery/*.mk vendor/omni/config/*.mk 2>/dev/null || echo "no match"
-        echo "::endgroup::"
-
-        echo "::group::TW_NO_EXFAT_FUSE / TW_INCLUDE_CRYPTO reference in Android.mk"
-        grep -n "TW_NO_EXFAT_FUSE\|TW_INCLUDE_CRYPTO" bootable/recovery/Android.mk 2>/dev/null || echo "no match"
-        echo "::endgroup::"
-
-        echo "::group::sgdisk reference (source location and Android.mk gating)"
-        find external -maxdepth 1 -iname "sgdisk*" 2>/dev/null || echo "external/sgdisk not present in synced source"
-        grep -rn "sgdisk" bootable/recovery/*.mk 2>/dev/null || echo "no sgdisk reference in recovery product makefiles"
-        echo "::endgroup::"
-
-        echo "::group::libcrypto.so consumers (reverse dependency check)"
-        grep -rln "libcrypto" bootable/recovery/*/Android.mk 2>/dev/null || echo "no direct libcrypto references found under bootable/recovery"
-        echo "::endgroup::"
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
     - name: Patch Android.mk to drop unconditional FAT tools (fsck.fat/fatlabel/mkfs.fat)
       run: |
         cd bootable/recovery
-        cp Android.mk Android.mk.bak
         sed -i '/^\s*fsck\.fat \\$/d; /^\s*fatlabel \\$/d; /^\s*mkfs\.fat \\$/d' Android.mk
-        echo "::group::Diff after patch"
-        diff -u Android.mk.bak Android.mk || true
-        echo "::endgroup::"
-        rm -f Android.mk.bak
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-
-    - name: Diagnose available static crypto library module name
-      run: |
-        echo "::group::Search for libcrypto_static module definition"
-        grep -rn "libcrypto_static" external/boringssl/*.bp external/boringssl/*.mk external/openssl/*.bp external/openssl/*.mk 2>/dev/null || echo "not found under external/boringssl or external/openssl (may not be synced, or named differently)"
-        echo "::endgroup::"
-
-        echo "::group::List crypto-related library projects actually synced"
-        find external -maxdepth 1 -iname "*ssl*" -o -maxdepth 1 -iname "*crypto*" 2>/dev/null
-        echo "::endgroup::"
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
     - name: Statically link libcrypto to eliminate standalone libcrypto.so
@@ -227,13 +136,6 @@ jobs:
                 with open(path, 'w', encoding='utf-8') as f:
                     f.write('\n'.join(out_lines))
                 patched.append(path)
-
-        print("::group::Patched files (libcrypto shared -> libcrypto_static static)")
-        for p in patched:
-            print(p)
-        if not patched:
-            print("no files patched (libcrypto not referenced in any LOCAL_SHARED_LIBRARIES line)")
-        print("::endgroup::")
         PYEOF
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
@@ -283,23 +185,8 @@ jobs:
       run: |
         source build/envsetup.sh
         export ALLOW_MISSING_DEPENDENCIES=true
-        lunch ${{ env.MAKEFILE_NAME }}-eng && make clean && make ${{ env.BUILD_TARGET }}image -j$(nproc --all)
+        lunch ${{ env.MAKEFILE_NAME }}-eng && make clean && make file_contexts.bin sepolicy.recovery ${{ env.BUILD_TARGET }}image -j$(nproc --all)
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-
-    - name: Verify recovery ramdisk contents (should be ABSENT if exclusion worked)
-      run: |
-        RAMDISK_ROOT="workspace/out/target/product/${{ env.DEVICE_NAME }}/recovery/root"
-        echo "Checking $RAMDISK_ROOT"
-        for f in sbin/fsck.exfat sbin/fsck.fat sbin/sgdisk sbin/libcrypto.so; do
-          if [ -e "$RAMDISK_ROOT/$f" ]; then
-            echo "::warning::STILL PRESENT (除外できていません): $f"
-          else
-            echo "OK REMOVED: $f"
-          fi
-        done
-        echo "::group::twrpapp related files (should be empty if excluded)"
-        find "$RAMDISK_ROOT" -iname "*twrpapp*" 2>/dev/null
-        echo "::endgroup::"
 
     - name: Upload to Release
       uses: softprops/action-gh-release@v1
