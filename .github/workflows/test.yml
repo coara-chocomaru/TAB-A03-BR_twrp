@@ -118,7 +118,9 @@ jobs:
           
     - name: Repo Sync
       run: |
-        repo sync -j1 --force-sync --no-tags --no-clone-bundle --optimized-fetch --prune
+          set -euo pipefail
+          export REPO_PYTHON=/usr/bin/python
+          repo sync -c -j4 --force-sync --no-clone-bundle --no-tags
       working-directory: android-recovery
   
     - name: Clone device tree
