@@ -1,2 +1,4 @@
 add_lunch_combo omni_a03br-eng
 add_lunch_combo omni_a03br-userdebug
+
+export ALLOW_MISSING_DEPENDENCIES=true
