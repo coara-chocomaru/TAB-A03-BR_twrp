@@ -164,10 +164,22 @@ jobs:
              find bootable/recovery/gui/theme/common/languages/ \
              -name "*.xml" ! -name "ja.xml" ! -name "en.xml" -delete
 
-    - name: Patch libselinux Android.mk to avoid WHOLE libpcre issue
+    - name: Patch libselinux Android.mk (Force remove WHOLE static linkage)
       run: |
         cd external/libselinux
-        sed -i.bak 's/^LOCAL_WHOLE_STATIC_LIBRARIES := libpcre/LOCAL_STATIC_LIBRARIES := libpcre/' Android.mk
+        sed -i '/LOCAL_WHOLE_STATIC_LIBRARIES/d' Android.mk
+        echo 'LOCAL_STATIC_LIBRARIES += libpcre' >> Android.mk
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
+    - name: Remove stale host libselinux intermediates to force rebuild
+      run: |
+        rm -rf out/host/linux-x86/obj32/STATIC_LIBRARIES/libselinux_intermediates
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
+    - name: Verify libselinux patch
+      run: |
+        echo "=== external/libselinux/Android.mk (libpcre lines) ==="
+        grep -n libpcre external/libselinux/Android.mk || echo "ERROR: libpcre not found!"
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
     - name: Fix GCC10+ fno-common host build failure
@@ -194,7 +206,7 @@ jobs:
         lunch ${{ env.MAKEFILE_NAME }}-eng
         make checkpolicy -j$(nproc --all)
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-      
+
     - name: Building recovery
       run: |
         source build/envsetup.sh
