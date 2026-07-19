@@ -55,7 +55,7 @@ jobs:
     if: github.event.repository.owner.id == github.event.sender.id
     runs-on: ubuntu-22.04
     container:
-      image: ghcr.io/catthehacker/ubuntu:runner-18.04
+      image: ghcr.io/catthehacker/ubuntu:runner-20.04
 
     env:
       LC_ALL: "C.UTF-8"
