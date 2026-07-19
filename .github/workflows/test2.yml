@@ -190,6 +190,53 @@ jobs:
         rm -f Android.mk.bak
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
+    - name: Diagnose available static crypto library module name
+      run: |
+        echo "::group::Search for libcrypto_static module definition"
+        grep -rn "libcrypto_static" external/boringssl/*.bp external/boringssl/*.mk external/openssl/*.bp external/openssl/*.mk 2>/dev/null || echo "not found under external/boringssl or external/openssl (may not be synced, or named differently)"
+        echo "::endgroup::"
+
+        echo "::group::List crypto-related library projects actually synced"
+        find external -maxdepth 1 -iname "*ssl*" -o -maxdepth 1 -iname "*crypto*" 2>/dev/null
+        echo "::endgroup::"
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
+    - name: Statically link libcrypto to eliminate standalone libcrypto.so
+      run: |
+        python3 - <<'PYEOF'
+        import re, glob
+
+        word = re.compile(r'(?<![\w.])libcrypto(?![\w.])')
+        patched = []
+        for path in glob.glob('bootable/recovery/**/Android.mk', recursive=True):
+            with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+            lines = content.split('\n')
+            changed = False
+            out_lines = []
+            for line in lines:
+                if 'LOCAL_SHARED_LIBRARIES' in line and word.search(line):
+                    new_line = word.sub('', line)
+                    new_line = re.sub(r'[ \t]+', ' ', new_line).rstrip()
+                    out_lines.append(new_line)
+                    out_lines.append('LOCAL_STATIC_LIBRARIES += libcrypto_static')
+                    changed = True
+                else:
+                    out_lines.append(line)
+            if changed:
+                with open(path, 'w', encoding='utf-8') as f:
+                    f.write('\n'.join(out_lines))
+                patched.append(path)
+
+        print("::group::Patched files (libcrypto shared -> libcrypto_static static)")
+        for p in patched:
+            print(p)
+        if not patched:
+            print("no files patched (libcrypto not referenced in any LOCAL_SHARED_LIBRARIES line)")
+        print("::endgroup::")
+        PYEOF
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
     - name: Clone common tree
       if: |
         env.COMMON_TREE_URL != null
