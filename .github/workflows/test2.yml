@@ -1,172 +1,165 @@
 name: Recovery Build (Legacy)
 
 on:
-push:
-branches:
-- main
-workflow_dispatch:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
 
 env:
-MANIFEST_URL: "https://github.com/minimal-manifest-twrp/platform_manifest_twrp_omni"
-MANIFEST_BRANCH: "twrp-5.1"
-DEVICE_TREE_BRANCH: "main"
-DEVICE_PATH: "device/sts/a03br"
-DEVICE_NAME: "a03br"
-MAKEFILE_NAME: "omni_a03br"
-BUILD_TARGET: "recovery"
-ANDROID_ROOT: "/work/src"
+  MANIFEST_URL: "https://github.com/minimal-manifest-twrp/platform_manifest_twrp_omni"
+  MANIFEST_BRANCH: "twrp-5.1"
+  DEVICE_TREE_BRANCH: "main"
+  DEVICE_PATH: "device/sts/a03br"
+  DEVICE_NAME: "a03br"
+  MAKEFILE_NAME: "omni_a03br"
+  BUILD_TARGET: "recovery"
 
 jobs:
-build:
-if: github.event.repository.owner.id == github.event.sender.id
-runs-on: ubuntu-latest
+  build:
+    if: github.event.repository.owner.id == github.event.sender.id
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:20.04
+      options: --user root
+      env:
+        DEBIAN_FRONTEND: noninteractive
 
-```
-container:
-  image: ubuntu:20.04
-  options: --user root
-  env:
-    DEBIAN_FRONTEND: noninteractive
+    permissions:
+      contents: write
 
-permissions:
-  contents: write
+    defaults:
+      run:
+        shell: bash
 
-defaults:
-  run:
-    shell: bash
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-steps:
-  - name: Check out
-    uses: actions/checkout@v4
-    with:
-      fetch-depth: 0
+      - name: Install build deps in container
+        run: |
+          apt-get update
+          apt-get install -y \
+            git curl ca-certificates rsync unzip zip \
+            gperf gcc-multilib g++-multilib libc6-dev-i386 \
+            lib32ncurses5-dev x11proto-core-dev libx11-dev \
+            tree lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc bc \
+            ccache lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev \
+            libsdl1.2-dev libwxgtk3.0-gtk3-dev libxml2 lzop pngcrush \
+            schedtool squashfs-tools imagemagick libbz2-dev lzma ncftp \
+            qemu-user-static libstdc++-10-dev python2 openjdk-8-jdk
+          ln -sf /usr/bin/python2 /usr/bin/python || true
 
-  - name: Install build deps in container
-    run: |
-      apt-get update
-      apt-get install -y \
-        git curl ca-certificates rsync unzip zip \
-        gperf gcc-multilib g++-multilib libc6-dev-i386 \
-        lib32ncurses5-dev x11proto-core-dev libx11-dev \
-        tree lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc bc \
-        ccache lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev \
-        libsdl1.2-dev libwxgtk3.0-gtk3-dev libxml2 lzop pngcrush \
-        schedtool squashfs-tools imagemagick libbz2-dev lzma ncftp \
-        qemu-user-static libstdc++-10-dev python2 openjdk-8-jdk
-      ln -sf /usr/bin/python2 /usr/bin/python || true
+      - name: Install repo
+        run: |
+          mkdir -p ~/bin
+          curl -L https://storage.googleapis.com/git-repo-downloads/repo -o ~/bin/repo
+          chmod a+x ~/bin/repo
+          ln -sf ~/bin/repo /usr/local/bin/repo
 
-  - name: Install repo
-    run: |
-      mkdir -p ~/bin
-      curl -L https://storage.googleapis.com/git-repo-downloads/repo -o ~/bin/repo
-      chmod a+x ~/bin/repo
-      ln -sf ~/bin/repo /usr/local/bin/repo
+      - name: Init repo
+        id: init
+        run: |
+          mkdir -p /work
+          cd /work
+          echo "workspace=/work/src" >> "$GITHUB_OUTPUT"
+          git config --global user.name "azwhikaru"
+          git config --global user.email "azwhikaru+37921907@github.com"
+          repo init --depth=1 --no-repo-verify -u "${MANIFEST_URL}" -b "${MANIFEST_BRANCH}"
 
-  - name: Prepare Android root
-    run: |
-      mkdir -p "${ANDROID_ROOT}"
-      mkdir -p /work/.ccache
-      git config --global user.name "azwhikaru"
-      git config --global user.email "azwhikaru+37921907@github.com"
+      - name: Sync repo
+        working-directory: /work
+        run: |
+          repo sync -c --force-sync --no-clone-bundle --no-tags --prune -j"$(nproc --all)"
 
-  - name: Init repo
-    run: |
-      cd "${ANDROID_ROOT}"
-      repo init --depth=1 --no-repo-verify -u "${MANIFEST_URL}" -b "${MANIFEST_BRANCH}"
+      - name: Move workflow repo into device tree
+        run: |
+          mkdir -p "/work/src/${DEVICE_PATH}"
+          rsync -a --delete \
+            --exclude=.git \
+            --exclude=.github \
+            ./ "/work/src/${DEVICE_PATH}/"
 
-  - name: Sync repo
-    working-directory: /work/src
-    run: |
-      repo sync -c --force-sync --no-clone-bundle --no-tags --prune -j"$(nproc --all)"
+      - name: Temporary exclusions for legacy TWRP
+        working-directory: /work/src
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
 
-  - name: Move workflow repo into device tree
-    run: |
-      mkdir -p "${ANDROID_ROOT}/${DEVICE_PATH}"
-      rsync -a --delete \
-        --exclude=.git \
-        --exclude=.github \
-        "${GITHUB_WORKSPACE}/" "${ANDROID_ROOT}/${DEVICE_PATH}/"
+          targets = [
+              "fsck.exfat",
+              "fsck.fat",
+              "libcrypto.so",
+              "sgdisk",
+              "me.twrp.twrpapp.apk",
+          ]
 
-  - name: Temporary exclusions for legacy TWRP
-    working-directory: /work/src
-    run: |
-      python3 - <<'PY'
-      from pathlib import Path
+          exts = {".mk", ".mak", ".bp", ".rc", ".txt", ".product"}
 
-      targets = [
-          "fsck.exfat",
-          "fsck.fat",
-          "libcrypto.so",
-          "sgdisk",
-          "me.twrp.twrpapp.apk",
-      ]
+          for p in Path(".").rglob("*"):
+              if not p.is_file() or p.suffix.lower() not in exts:
+                  continue
+              try:
+                  text = p.read_text(encoding="utf-8", errors="ignore")
+              except Exception:
+                  continue
 
-      exts = {".mk", ".mak", ".bp", ".rc", ".txt", ".product"}
+              lines = text.splitlines()
+              out = []
+              changed = False
 
-      for p in Path(".").rglob("*"):
-          if not p.is_file() or p.suffix.lower() not in exts:
-              continue
-          try:
-              text = p.read_text(encoding="utf-8", errors="ignore")
-          except Exception:
-              continue
-
-          lines = text.splitlines()
-          out = []
-          changed = False
-
-          for line in lines:
-              stripped = line.lstrip()
-              if stripped.startswith("#"):
+              for line in lines:
+                  stripped = line.lstrip()
+                  if stripped.startswith("#"):
+                      out.append(line)
+                      continue
+                  if any(t in line for t in targets):
+                      changed = True
+                      continue
                   out.append(line)
-                  continue
-              if any(t in line for t in targets):
-                  changed = True
-                  continue
-              out.append(line)
 
-          if changed:
-              new_text = "\n".join(out)
-              if text.endswith("\n"):
-                  new_text += "\n"
-              p.write_text(new_text, encoding="utf-8")
-      PY
+              if changed:
+                  new_text = "\n".join(out)
+                  if text.endswith("\n"):
+                      new_text += "\n"
+                  p.write_text(new_text, encoding="utf-8")
+          PY
 
-  - name: Verify exclusions
-    working-directory: /work/src
-    run: |
-      if grep -RInE 'fsck\.exfat|fsck\.fat|libcrypto\.so|sgdisk|me\.twrp\.twrpapp\.apk' \
-        . --include='*.mk' --include='*.mak' --include='*.bp' --include='*.rc' --include='*.product' ; then
-        echo "Unwanted entries still remain."
-        exit 1
-      fi
+      - name: Verify exclusions
+        working-directory: /work/src
+        run: |
+          if grep -RInE 'fsck\.exfat|fsck\.fat|libcrypto\.so|sgdisk|me\.twrp\.twrpapp\.apk' \
+            . --include='*.mk' --include='*.mak' --include='*.bp' --include='*.rc' --include='*.product' ; then
+            echo "Unwanted entries still remain."
+            exit 1
+          fi
 
-  - name: Build recovery
-    working-directory: /work/src
-    run: |
-      source build/envsetup.sh
-      export ALLOW_MISSING_DEPENDENCIES=true
-      export USE_CCACHE=1
-      export CCACHE_DIR=/work/.ccache
-      export BUILD_BROKEN_DUP_RULES=true
-      ccache -M 20G || true
-      lunch "${MAKEFILE_NAME}-eng"
-      make clean
-      make "${BUILD_TARGET}image" -j"$(nproc --all)"
+      - name: Build recovery
+        working-directory: /work/src
+        run: |
+          source build/envsetup.sh
+          export ALLOW_MISSING_DEPENDENCIES=true
+          export USE_CCACHE=1
+          export CCACHE_DIR=/work/.ccache
+          export BUILD_BROKEN_DUP_RULES=true
+          ccache -M 20G || true
+          lunch "${MAKEFILE_NAME}-eng"
+          make clean
+          make "${BUILD_TARGET}image" -j"$(nproc --all)"
 
-  - name: Upload release
-    uses: softprops/action-gh-release@v1
-    with:
-      files: |
-        /work/src/out/target/product/${{ env.DEVICE_NAME }}/${{ env.BUILD_TARGET }}.img
-        /work/src/out/target/product/${{ env.DEVICE_NAME }}/*.zip
-        /work/src/out/target/product/${{ env.DEVICE_NAME }}/*vendor*.img
-      name: ${{ env.DEVICE_NAME }}-${{ github.run_id }}
-      tag_name: ${{ github.run_id }}
-      body: |
-        Manifest: ${{ env.MANIFEST_BRANCH }}
-        Device: ${{ env.DEVICE_NAME }}
-        Target: ${{ env.BUILD_TARGET }}.img
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-```
+      - name: Upload release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            /work/src/out/target/product/${{ env.DEVICE_NAME }}/${{ env.BUILD_TARGET }}.img
+            /work/src/out/target/product/${{ env.DEVICE_NAME }}/*.zip
+            /work/src/out/target/product/${{ env.DEVICE_NAME }}/*vendor*.img
+          name: ${{ env.DEVICE_NAME }}-${{ github.run_id }}
+          tag_name: ${{ github.run_id }}
+          body: |
+            Manifest: ${{ env.MANIFEST_BRANCH }}
+            Device: ${{ env.DEVICE_NAME }}
+            Target: ${{ env.BUILD_TARGET }}.img
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
