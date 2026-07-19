@@ -104,6 +104,12 @@ jobs:
         fi
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
+    - name: Patch Android.mk to drop unconditional FAT tools (fsck.fat/fatlabel/mkfs.fat)
+      run: |
+        cd bootable/recovery
+        sed -i '/^\s*fsck\.fat \\$/d; /^\s*fatlabel \\$/d; /^\s*mkfs\.fat \\$/d' Android.mk
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
     - name: Statically link libcrypto to eliminate standalone libcrypto.so
       run: |
         python3 - <<'PYEOF'
@@ -167,6 +173,13 @@ jobs:
       run: |
         sed -i 's/^te_assert_t \*te_assertions;/extern te_assert_t *te_assertions;/' external/checkpolicy/checkpolicy.h
         echo 'te_assert_t *te_assertions;' >> external/checkpolicy/checkpolicy.c
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
+    - name: Prebuild host libpcre
+      run: |
+        source build/envsetup.sh
+        lunch ${{ env.MAKEFILE_NAME }}-eng
+        make host-libpcre -j$(nproc --all)
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
     - name: Building recovery
