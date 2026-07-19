@@ -160,7 +160,7 @@ jobs:
 
       - name: Building recovery
         run: |
-          set -euo pipefail
+          set -eo pipefail
           source build/envsetup.sh
           export ALLOW_MISSING_DEPENDENCIES=true
           export COMMON_GLOBAL_CFLAGS="-fcommon"
