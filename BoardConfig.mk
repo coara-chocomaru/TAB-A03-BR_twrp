@@ -25,6 +25,7 @@ BOARD_HAS_HDMI := false
 WITHOUT_CHECK_API := true
 MALLOC_SVELTE := true
 TARGET_NO_BOOTLOADER := true
+TARGET_LOW_RAM_DEVICE := true
 
 # Architecture
 TARGET_ARCH := arm64
