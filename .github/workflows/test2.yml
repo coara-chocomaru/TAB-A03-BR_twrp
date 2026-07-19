@@ -57,10 +57,23 @@ jobs:
           libbz2-dev lzma ncftp qemu-user-static libstdc++-10-dev libncurses5 python3 \
           git curl python2 debconf-utils
         update-alternatives --install /usr/bin/python python /usr/bin/python2 1 || true
+
     - name: Install OpenJDK
       run: |
         apt -y install openjdk-8-jdk
         echo "JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64" >> $GITHUB_ENV
+
+    - name: Create swap space manually
+      run: |
+        swapoff /swapfile || true
+        rm -f /swapfile
+        fallocate -l 12G /swapfile
+        chmod 600 /swapfile
+        mkswap /swapfile
+        swapon /swapfile
+        echo "Swap created:"
+        free -h
+        swapon --show
 
     - name: Setup SSH Keys
       if: ${{ startsWith(env.MANIFEST_URL, 'git@github.com') }}
@@ -110,7 +123,13 @@ jobs:
           echo 'TW_NO_EXFAT := true' >> BoardConfig.mk
         fi
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-      
+
+    - name: Patch Android.mk to drop unconditional FAT tools (fsck.fat/fatlabel/mkfs.fat)
+      run: |
+        cd bootable/recovery
+        sed -i '/^\s*fsck\.fat \\$/d; /^\s*fatlabel \\$/d; /^\s*mkfs\.fat \\$/d' Android.mk
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
     - name: Statically link libcrypto to eliminate standalone libcrypto.so
       run: |
         python3 - <<'PYEOF'
@@ -147,11 +166,6 @@ jobs:
       run: |
         git clone ${{ env.COMMON_TREE_URL }} -b ${{ env.DEVICE_TREE_BRANCH }} ./${{ env.COMMON_PATH }}
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-
-    - name: Set Swap Space
-      uses: pierotofy/set-swap-space@master
-      with:
-        swap-size-gb: 12
 
     - name: Remove unused language files
       run: |
