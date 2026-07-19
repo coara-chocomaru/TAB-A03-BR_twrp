@@ -86,7 +86,6 @@ jobs:
 
     - name: Verify repo sync completeness
       run: |
-        cd workspace
         MISSING=0
         for p in external/sgdisk external/exfat external/fsck_msdos external/fuse bootable/recovery system/vold; do
           if [ ! -d "$p" ] || [ -z "$(ls -A "$p" 2>/dev/null)" ]; then
@@ -108,7 +107,7 @@ jobs:
 
     - name: Show current BoardConfig exclusion flags
       run: |
-        cd workspace/${{ env.DEVICE_PATH }}
+        cd ${{ env.DEVICE_PATH }}
         echo "::group::Current TW_ / exclusion related flags"
         grep -E '^(TW_|BOARD_HAS_NO)' BoardConfig.mk || true
         echo "::endgroup::"
@@ -116,7 +115,6 @@ jobs:
 
     - name: Diagnose actual bootable/recovery source for these binaries
       run: |
-        cd workspace
         echo "::group::bootable/recovery remote and revision info"
         git -C bootable/recovery remote -v 2>/dev/null || echo "bootable/recovery is not a git repo or missing"
         git -C bootable/recovery log -1 2>/dev/null || true
@@ -170,6 +168,12 @@ jobs:
         sudo apt -y install python2
         sudo update-alternatives --install /usr/bin/python python /usr/bin/python2 1
       continue-on-error: true
+
+    - name: Remove unused language files
+      run: |
+             cd workspace
+             find bootable/recovery/gui/theme/common/languages/ \
+             -name "*.xml" ! -name "ja.xml" ! -name "en.xml" -delete
 
     - name: Fix GCC10+ fno-common host build failure
       run: |
