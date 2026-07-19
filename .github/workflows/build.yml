@@ -44,7 +44,7 @@ jobs:
       contents: write
 
     container:
-      image: ghcr.io/catthehacker/ubuntu:full-18.04
+      image: ghcr.io/catthehacker/ubuntu:full-20.04
       options: --user root
 
     env:
