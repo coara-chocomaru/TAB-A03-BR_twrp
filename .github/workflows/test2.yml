@@ -167,7 +167,7 @@ jobs:
     - name: Patch libselinux Android.mk to avoid WHOLE libpcre issue
       run: |
         cd external/libselinux
-        sed -i 's/^LOCAL_WHOLE_STATIC_LIBRARIES := libpcre/LOCAL_STATIC_LIBRARIES := libpcre/' Android.mk
+        sed -i.bak 's/^LOCAL_WHOLE_STATIC_LIBRARIES := libpcre/LOCAL_STATIC_LIBRARIES := libpcre/' Android.mk
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
     - name: Fix GCC10+ fno-common host build failure
@@ -194,7 +194,7 @@ jobs:
         lunch ${{ env.MAKEFILE_NAME }}-eng
         make checkpolicy -j$(nproc --all)
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-
+      
     - name: Building recovery
       run: |
         source build/envsetup.sh
