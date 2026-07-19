@@ -4,275 +4,224 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:
-
 env:
-  MANIFEST_URL: "https://github.com/minimal-manifest-twrp/platform_manifest_twrp_omni"
-  MANIFEST_BRANCH: "twrp-5.1"
-  DEVICE_TREE_BRANCH: "main"
-  DEVICE_PATH: "device/sts/a03br"
-  DEVICE_NAME: "a03br"
-  MAKEFILE_NAME: "omni_a03br"
-  BUILD_TARGET: "recovery"
-  ANDROID_ROOT: "/work/src"
-
+  MANIFEST_URL: 'https://github.com/minimal-manifest-twrp/platform_manifest_twrp_omni'
+  MANIFEST_BRANCH: 'twrp-5.1'
+  DEVICE_TREE_URL: 'https://github.com/coara-chocomaru/a03-br'
+  DEVICE_TREE_BRANCH: 'main'
+  DEVICE_PATH: 'device/sts/a03br'
+  DEVICE_NAME: 'a03br'
+  MAKEFILE_NAME: 'omni_a03br'
+  BUILD_TARGET: 'recovery'
 jobs:
   build:
     if: github.event.repository.owner.id == github.event.sender.id
-    runs-on: ubuntu-latest
-
-    container:
-      image: ubuntu:20.04
-      options: --user root
-      env:
-        DEBIAN_FRONTEND: noninteractive
-
+    runs-on: ubuntu-22.04
     permissions:
       contents: write
-
-    defaults:
-      run:
-        shell: bash
-
     steps:
-      - name: Check out
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+    - name: Display Run Parameters
+      run: |
+        echo "::group::User Environment Variables"
+        echo "Manifest URL: ${{ env.MANIFEST_URL }}"
+        echo "Manifest Branch: ${{ env.MANIFEST_BRANCH }}"
+        echo "Device Tree URL: ${{ env.DEVICE_TREE_URL }}"
+        echo "Device Tree Branch: ${{ env.DEVICE_TREE_BRANCH }}"
+        echo "Device Path: ${{ env.DEVICE_PATH }}"
+        echo "Device Name: ${{ env.DEVICE_NAME }}"
+        echo "Makefile Name: ${{ env.MAKEFILE_NAME }}"
+        echo "Build Target: ${{ env.BUILD_TARGET }}.img"
+        echo "::endgroup::"
 
-      - name: Install build deps in container
-        run: |
-          apt-get update
-          apt-get install -y \
-            git curl ca-certificates rsync unzip zip \
-            gperf gcc-multilib g++-multilib libc6-dev-i386 \
-            lib32ncurses5-dev x11proto-core-dev libx11-dev \
-            tree lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc bc \
-            ccache lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev \
-            libsdl1.2-dev libwxgtk3.0-gtk3-dev libxml2 lzop pngcrush \
-            schedtool squashfs-tools imagemagick libbz2-dev lzma ncftp \
-            qemu-user-static libstdc++-10-dev python2 openjdk-8-jdk \
-            make build-essential
-          ln -sf /usr/bin/python2 /usr/bin/python || true
+    - name: Check Out
+      uses: actions/checkout@v3
 
-      - name: Install repo
-        run: |
-          mkdir -p ~/bin
-          curl -L https://storage.googleapis.com/git-repo-downloads/repo -o ~/bin/repo
-          chmod a+x ~/bin/repo
-          ln -sf ~/bin/repo /usr/local/bin/repo
+    - name: Cleanup
+      uses: rokibhasansagar/slimhub_actions@main
 
-      - name: Prepare Android root
-        run: |
-          mkdir -p "${ANDROID_ROOT}"
-          mkdir -p /work/.ccache
-          git config --global user.name "azwhikaru"
-          git config --global user.email "azwhikaru+37921907@github.com"
+    - name: Prepare the environment
+      run: |
+        sudo apt update
+        sudo apt -y upgrade
+        sudo apt -y install gperf gcc-multilib gcc-10-multilib g++-multilib g++-10-multilib libc6-dev \
+          lib32ncurses5-dev x11proto-core-dev libx11-dev tree lib32z-dev libgl1-mesa-dev libxml2-utils \
+          xsltproc bc ccache lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev libsdl1.2-dev \
+          libwxgtk3.0-gtk3-dev libxml2 lzop pngcrush schedtool squashfs-tools imagemagick \
+          libbz2-dev lzma ncftp qemu-user-static libstdc++-10-dev libncurses5 python3
 
-      - name: Init repo
-        working-directory: /work/src
-        run: |
-          repo init --depth=1 --no-repo-verify -u "${MANIFEST_URL}" -b "${MANIFEST_BRANCH}"
+    - name: Install OpenJDK
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'zulu'
+        java-version: '8'
 
-      - name: Sync repo
-        working-directory: /work/src
-        run: |
-          repo sync -c --force-sync --no-clone-bundle --no-tags --prune -j"$(nproc --all)"
+    - name: Setup SSH Keys
+      if: ${{ startsWith(env.MANIFEST_URL, 'git@github.com') }}
+      uses: webfactory/ssh-agent@v0.5.4
+      with:
+          ssh-private-key: |
+              ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Move workflow repo into device tree
-        run: |
-          mkdir -p "/work/src/${DEVICE_PATH}"
-          rsync -a --delete \
-            --exclude=.git \
-            --exclude=.github \
-            "${GITHUB_WORKSPACE}/" "/work/src/${DEVICE_PATH}/"
+    - name: Install repo
+      run: |
+        mkdir -p ~/bin
+        curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+        chmod a+x ~/bin/repo
+        sudo ln -sf ~/bin/repo /usr/bin/repo
 
-      - name: Temporary exclusions for legacy TWRP
-        working-directory: /work/src
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
+    - name: Initialize repo
+      run: |
+        mkdir workspace
+        cd workspace
+        echo "workspace-folder=$(pwd)" >> $GITHUB_OUTPUT
+        git config --global user.name "azwhikaru"
+        git config --global user.email "azwhikaru+37921907@github.com"
+        repo init --depth=1 -u ${{ env.MANIFEST_URL }} -b ${{ env.MANIFEST_BRANCH }}
+      id: pwd
 
-          TARGETS = {
-              "fsck.exfat",
-              "fsck.fat",
-              "libcrypto.so",
-              "sgdisk",
-              "me.twrp.twrpapp.apk",
-          }
+    - name: Repo Sync
+      run: |
+        repo sync -j$(nproc --all) --force-sync
+      working-directory: workspace
 
-          MK_EXTS = {".mk", ".mak", ".product"}
-
-          def line_has_target(line: str) -> bool:
-              if line.lstrip().startswith("#"):
-                  return False
-              return any(re.search(rf"\b{re.escape(t)}\b", line) for t in TARGETS)
-
-          def stanza_has_target(stanza_lines: list[str]) -> bool:
-              joined = "\n".join(stanza_lines)
-              return any(re.search(rf"^\s*(LOCAL_MODULE|LOCAL_PACKAGE_NAME)\s*[:+]?=\s*{re.escape(t)}\s*$", joined, re.M) for t in TARGETS)
-
-          def filter_android_mk(lines: list[str]) -> list[str]:
-              out = []
-              stanza = []
-              in_stanza = False
-
-              def flush_stanza():
-                  nonlocal stanza, out
-                  if not stanza:
-                      return
-                  if stanza_has_target(stanza):
-                      return
-                  out.extend(stanza)
-                  stanza = []
-
-              for line in lines:
-                  stripped = line.strip()
-
-                  if stripped == "include $(CLEAR_VARS)":
-                      flush_stanza()
-                      in_stanza = True
-                      stanza = [line]
-                      continue
-
-                  if in_stanza:
-                      stanza.append(line)
-                      if stripped.startswith("include $(") and "BUILD_" in stripped:
-                          flush_stanza()
-                          in_stanza = False
-                      continue
-
-                  if line_has_target(line) and (
-                      "PRODUCT_PACKAGES" in line
-                      or "LOCAL_REQUIRED_MODULES" in line
-                      or "PRODUCT_COPY_FILES" in line
-                  ):
-                      continue
-
-                  out.append(line)
-
-              flush_stanza()
-              return out
-
-          def filter_product(lines: list[str]) -> list[str]:
-              out = []
-              for line in lines:
-                  if line_has_target(line) and (
-                      "PRODUCT_PACKAGES" in line
-                      or "LOCAL_REQUIRED_MODULES" in line
-                      or "PRODUCT_COPY_FILES" in line
-                  ):
-                      continue
-                  out.append(line)
-              return out
-
-          for p in Path(".").rglob("*"):
-              if not p.is_file() or p.suffix.lower() not in MK_EXTS:
-                  continue
-
-              try:
-                  text = p.read_text(encoding="utf-8", errors="ignore")
-              except Exception:
-                  continue
-
-              lines = text.splitlines()
-
-              if p.suffix.lower() in {".mk", ".mak"}:
-                  new_lines = filter_android_mk(lines)
-              else:
-                  new_lines = filter_product(lines)
-
-              new_text = "\n".join(new_lines)
-              if text.endswith("\n"):
-                  new_text += "\n"
-
-              if new_text != text:
-                  p.write_text(new_text, encoding="utf-8")
-          PY
-
-      - name: Verify exclusions
-        working-directory: /work/src
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-          import sys
-
-          TARGETS = {
-              "fsck.exfat",
-              "fsck.fat",
-              "libcrypto.so",
-              "sgdisk",
-              "me.twrp.twrpapp.apk",
-          }
-
-          MK_EXTS = {".mk", ".mak", ".product"}
-          bad = []
-
-          def line_has_target(line: str) -> bool:
-              if line.lstrip().startswith("#"):
-                  return False
-              return any(re.search(rf"\b{re.escape(t)}\b", line) for t in TARGETS)
-
-          for p in Path(".").rglob("*"):
-              if not p.is_file() or p.suffix.lower() not in MK_EXTS:
-                  continue
-
-              try:
-                  lines = p.read_text(encoding="utf-8", errors="ignore").splitlines()
-              except Exception:
-                  continue
-
-              for i, line in enumerate(lines, 1):
-                  if line_has_target(line) and (
-                      "PRODUCT_PACKAGES" in line
-                      or "LOCAL_MODULE" in line
-                      or "LOCAL_PACKAGE_NAME" in line
-                      or "LOCAL_REQUIRED_MODULES" in line
-                      or "PRODUCT_COPY_FILES" in line
-                  ):
-                      bad.append(f"{p}:{i}:{line}")
-
-          if bad:
-              print("\n".join(bad))
-              print("Unwanted active entries still remain.")
-              sys.exit(1)
-          PY
-
-      - name: Sanity check envsetup
-        working-directory: /work/src
-        run: |
-          if [ ! -f build/envsetup.sh ]; then
-            echo "build/envsetup.sh is missing in Android root"
-            exit 1
+    - name: Verify repo sync completeness
+      run: |
+        cd workspace
+        MISSING=0
+        for p in external/sgdisk external/exfat external/fsck_msdos external/fuse bootable/recovery system/vold; do
+          if [ ! -d "$p" ] || [ -z "$(ls -A "$p" 2>/dev/null)" ]; then
+            echo "MISSING PROJECT: $p"
+            MISSING=1
+          else
+            echo "OK PROJECT: $p"
           fi
+        done
+        if [ "$MISSING" -eq 1 ]; then
+          echo "::warning::repo sync で一部プロジェクトが空、または未取得です。manifest.xml と local_manifests を確認してください。"
+        fi
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
-      - name: Build recovery
-        working-directory: /work/src
-        run: |
-          source build/envsetup.sh
-          export ALLOW_MISSING_DEPENDENCIES=true
-          export USE_CCACHE=1
-          export CCACHE_DIR=/work/.ccache
-          export BUILD_BROKEN_DUP_RULES=true
-          ccache -M 20G || true
-          lunch "${MAKEFILE_NAME}-eng"
-          make clean
-          make "${BUILD_TARGET}image" -j"$(nproc --all)"
+    - name: Move files to workspace
+      run: |
+        mkdir -p workspace/${{ env.DEVICE_PATH }}
+        ls | grep -v workspace | xargs -I{} mv {} workspace/${{ env.DEVICE_PATH }}
 
-      - name: Upload release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            /work/src/out/target/product/${{ env.DEVICE_NAME }}/${{ env.BUILD_TARGET }}.img
-            /work/src/out/target/product/${{ env.DEVICE_NAME }}/*.zip
-            /work/src/out/target/product/${{ env.DEVICE_NAME }}/*vendor*.img
-          name: ${{ env.DEVICE_NAME }}-${{ github.run_id }}
-          tag_name: ${{ github.run_id }}
-          body: |
-            Manifest: ${{ env.MANIFEST_BRANCH }}
-            Device: ${{ env.DEVICE_NAME }}
-            Target: ${{ env.BUILD_TARGET }}.img
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Show current BoardConfig exclusion flags
+      run: |
+        cd workspace/${{ env.DEVICE_PATH }}
+        echo "::group::Current TW_ / exclusion related flags"
+        grep -E '^(TW_|BOARD_HAS_NO)' BoardConfig.mk || true
+        echo "::endgroup::"
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
+    - name: Diagnose actual bootable/recovery source for these binaries
+      run: |
+        cd workspace
+        echo "::group::bootable/recovery remote and revision info"
+        git -C bootable/recovery remote -v 2>/dev/null || echo "bootable/recovery is not a git repo or missing"
+        git -C bootable/recovery log -1 2>/dev/null || true
+        echo "::endgroup::"
+
+        echo "::group::twrp-extras.xml presence in manifest"
+        find .repo -iname "twrp-extras.xml" 2>/dev/null || echo "twrp-extras.xml not found in synced manifest"
+        echo "::endgroup::"
+
+        echo "::group::fsck.fat / mkfs.fat reference in Android.mk"
+        grep -n "fsck.fat\|mkfs.fat\|fatlabel" bootable/recovery/Android.mk 2>/dev/null || echo "Android.mk not found or no match"
+        echo "::endgroup::"
+
+        echo "::group::TW_EXCLUDE_TWRPAPP reference in Android.mk"
+        grep -n "TW_EXCLUDE_TWRPAPP" bootable/recovery/Android.mk 2>/dev/null || echo "no match"
+        echo "::endgroup::"
+
+        echo "::group::TWRPApp package reference (product makefiles)"
+        grep -rn "TWRPApp\|twrpapp" bootable/recovery/*.mk vendor/omni/config/*.mk 2>/dev/null || echo "no match"
+        echo "::endgroup::"
+
+        echo "::group::TW_NO_EXFAT_FUSE / TW_INCLUDE_CRYPTO reference in Android.mk"
+        grep -n "TW_NO_EXFAT_FUSE\|TW_INCLUDE_CRYPTO" bootable/recovery/Android.mk 2>/dev/null || echo "no match"
+        echo "::endgroup::"
+
+        echo "::group::sgdisk reference (source location and Android.mk gating)"
+        find external -maxdepth 1 -iname "sgdisk*" 2>/dev/null || echo "external/sgdisk not present in synced source"
+        grep -rn "sgdisk" bootable/recovery/*.mk 2>/dev/null || echo "no sgdisk reference in recovery product makefiles"
+        echo "::endgroup::"
+
+        echo "::group::libcrypto.so consumers (reverse dependency check)"
+        grep -rln "libcrypto" bootable/recovery/*/Android.mk 2>/dev/null || echo "no direct libcrypto references found under bootable/recovery"
+        echo "::endgroup::"
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
+    - name: Clone common tree
+      if: |
+        env.COMMON_TREE_URL != null
+        && env.COMMON_PATH != null
+      run: |
+        git clone ${{ env.COMMON_TREE_URL }} -b ${{ env.DEVICE_TREE_BRANCH }} ./${{ env.COMMON_PATH }}
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
+    - name: Set Swap Space
+      uses: pierotofy/set-swap-space@master
+      with:
+        swap-size-gb: 12
+
+    - name: Switch to Python2
+      run: |
+        sudo apt -y install python2
+        sudo update-alternatives --install /usr/bin/python python /usr/bin/python2 1
+      continue-on-error: true
+
+    - name: Fix GCC10+ fno-common host build failure
+      run: |
+        echo 'HOST_GLOBAL_CFLAGS += -fcommon' >> build/core/combo/HOST_linux-x86.mk
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
+    - name: Patch checkpolicy.h to fix GCC10+ multiple definition error
+      run: |
+        sed -i 's/^te_assert_t \*te_assertions;/extern te_assert_t *te_assertions;/' external/checkpolicy/checkpolicy.h
+        echo 'te_assert_t *te_assertions;' >> external/checkpolicy/checkpolicy.c
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
+    - name: Fix missing C++11 standard for target recovery build
+      run: |
+        echo 'TARGET_GLOBAL_CPPFLAGS += -std=gnu++11' >> build/core/combo/TARGET_linux-arm64.mk
+        echo 'TARGET_GLOBAL_CPPFLAGS += -std=gnu++11' >> build/core/combo/TARGET_linux-arm.mk
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
+    - name: Building recovery
+      run: |
+        source build/envsetup.sh
+        export ALLOW_MISSING_DEPENDENCIES=true
+        lunch ${{ env.MAKEFILE_NAME }}-eng && make clean && make ${{ env.BUILD_TARGET }}image -j$(nproc --all)
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
+    - name: Verify recovery ramdisk contents (should be ABSENT if exclusion worked)
+      run: |
+        RAMDISK_ROOT="workspace/out/target/product/${{ env.DEVICE_NAME }}/recovery/root"
+        echo "Checking $RAMDISK_ROOT"
+        for f in sbin/fsck.exfat sbin/fsck.fat sbin/sgdisk sbin/libcrypto.so; do
+          if [ -e "$RAMDISK_ROOT/$f" ]; then
+            echo "::warning::STILL PRESENT (除外できていません): $f"
+          else
+            echo "OK REMOVED: $f"
+          fi
+        done
+        echo "::group::twrpapp related files (should be empty if excluded)"
+        find "$RAMDISK_ROOT" -iname "*twrpapp*" 2>/dev/null
+        echo "::endgroup::"
+
+    - name: Upload to Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: | 
+          workspace/out/target/product/${{ env.DEVICE_NAME }}/${{ env.BUILD_TARGET }}.img
+          workspace/out/target/product/${{ env.DEVICE_NAME }}/*.zip
+          workspace/out/target/product/${{ env.DEVICE_NAME }}/*vendor*.img
+        name: ${{ env.DEVICE_NAME }}-${{ github.run_id }}
+        tag_name: ${{ github.run_id }}
+        body: |
+          Manifest: ${{ env.MANIFEST_BRANCH }}
+          Device: ${{ env.DEVICE_NAME }}
+          Target: ${{ env.BUILD_TARGET }}.img
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
