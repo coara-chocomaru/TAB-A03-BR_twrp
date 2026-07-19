@@ -117,6 +117,7 @@ jobs:
       id: pwd
           
     - name: Repo Sync
+      shell: bash
       run: |
           set -euo pipefail
           export REPO_PYTHON=/usr/bin/python
