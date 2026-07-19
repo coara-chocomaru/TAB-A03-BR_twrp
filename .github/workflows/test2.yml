@@ -187,7 +187,7 @@ jobs:
       run: |
         source build/envsetup.sh
         export ALLOW_MISSING_DEPENDENCIES=true
-        lunch ${{ env.MAKEFILE_NAME }}-eng && make clean && make file_contexts.bin sepolicy.recovery ${{ env.BUILD_TARGET }}image -j$(nproc --all)
+        lunch ${{ env.MAKEFILE_NAME }}-eng && make clean && make ${{ env.BUILD_TARGET }}image -j$(nproc --all)
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
     - name: Upload to Release
