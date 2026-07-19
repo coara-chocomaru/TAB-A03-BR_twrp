@@ -1,181 +1,125 @@
-name: Recovery Build (Legacy)
+name: Recovery Build
 
 on:
-  push:
-    branches:
-      - main
-
-env:
-  MANIFEST_URL: 'https://github.com/minimal-manifest-twrp/platform_manifest_twrp_omni'
-  MANIFEST_BRANCH: 'twrp-5.1'
-  DEVICE_TREE_URL: 'https://github.com/coara-chocomaru/a03-br'
-  DEVICE_TREE_BRANCH: 'main'
-  DEVICE_PATH: 'device/sts/a03br'
-  DEVICE_NAME: 'a03br'
-  MAKEFILE_NAME: 'omni_a03br'
-  BUILD_TARGET: 'recovery'
+  workflow_dispatch:
+    inputs:
+      MANIFEST_URL:
+        description: 'MANIFEST_URL (if want to use SSH keys, use git@github.com:XXXXX)'
+        required: true
+        default: 'https://github.com/minimal-manifest-twrp/platform_manifest_twrp_omni.git'
+      MANIFEST_BRANCH:
+        description: 'MANIFEST_BRANCH'
+        required: true
+        default: 'twrp-5.1'
+      DEVICE_TREE_URL:
+        description: 'DEVICE_TREE_URL'
+        required: true
+        default: 'https://github.com/coara-chocomaru/a03-br'
+      DEVICE_TREE_BRANCH:
+        description: 'DEVICE_TREE_BRANCH'
+        required: true
+        default: 'main'
+      DEVICE_PATH:
+        description: 'DEVICE_PATH'
+        required: true
+        default: 'device/sts/a03br'
+      DEVICE_NAME:
+        description: 'DEVICE_NAME'
+        required: true
+        default: 'a03br'
+      MAKEFILE_NAME:
+        description: 'MAKEFILE_NAME'
+        required: true
+        default: 'omni_a03br'
+      BUILD_TARGET:
+        description: 'BUILD_TARGET'
+        required: true
+        default: 'recovery'
 
 jobs:
   build:
     if: github.event.repository.owner.id == github.event.sender.id
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-18.04
     permissions:
       contents: write
-
     steps:
     - name: Display Run Parameters
       run: |
         echo "::group::User Environment Variables"
-        echo "Manifest URL: ${{ env.MANIFEST_URL }}"
-        echo "Manifest Branch: ${{ env.MANIFEST_BRANCH }}"
-        echo "Device Tree URL: ${{ env.DEVICE_TREE_URL }}"
-        echo "Device Tree Branch: ${{ env.DEVICE_TREE_BRANCH }}"
-        echo "Device Path: ${{ env.DEVICE_PATH }}"
-        echo "Device Name: ${{ env.DEVICE_NAME }}"
-        echo "Makefile Name: ${{ env.MAKEFILE_NAME }}"
-        echo "Build Target: ${{ env.BUILD_TARGET }}.img"
+        echo "Manifest URL: ${{ github.event.inputs.MANIFEST_URL }}"
+        echo "Manifest Branch: ${{ github.event.inputs.MANIFEST_BRANCH }}"
+        echo "Device Tree URL: ${{ github.event.inputs.DEVICE_TREE_URL }}"
+        echo "Device Tree Branch: ${{ github.event.inputs.DEVICE_TREE_BRANCH }}"
+        echo "Device Path: ${{ github.event.inputs.DEVICE_PATH }}"
+        echo "Device Name: ${{ github.event.inputs.DEVICE_NAME }}"
+        echo "Makefile Name: ${{ github.event.inputs.MAKEFILE_NAME }}"
+        echo "Build Target: ${{ github.event.inputs.BUILD_TARGET }}.img"
         echo "::endgroup::"
-
+ 
+    # You might want to Checkout your repo first, but not mandatory
     - name: Check Out
       uses: actions/checkout@v3
 
-    - name: Cleanup
-      uses: rokibhasansagar/slimhub_actions@main
-
-    - name: Prepare the environment (install packages, ensure python -> python2)
+    - name: Prepare the environment
       run: |
         sudo apt update
         sudo apt -y upgrade
-
-        sudo apt -y install \
-          gperf gcc-multilib gcc-10-multilib g++-multilib g++-10-multilib libc6-dev \
-          lib32ncurses5-dev x11proto-core-dev libx11-dev tree lib32z-dev libgl1-mesa-dev libxml2-utils \
-          xsltproc bc ccache lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev libsdl1.2-dev \
-          libwxgtk3.0-gtk3-dev libxml2 lzop pngcrush schedtool squashfs-tools imagemagick \
-          libbz2-dev lzma ncftp qemu-user-static libstdc++-10-dev libncurses5 rsync curl unzip \
-          python2
-
-        sudo update-alternatives --install /usr/bin/python python /usr/bin/python2 1 || true
-        python --version
-
-        mkdir -p ~/bin
-        echo "Prepared environment"
+        sudo apt -y install bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf imagemagick lib32ncurses5-dev lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python
 
     - name: Install OpenJDK
       uses: actions/setup-java@v3
       with:
         distribution: 'zulu'
-        java-version: '8'
-
-    - name: Setup SSH Keys
-      if: ${{ startsWith(env.MANIFEST_URL, 'git@github.com') }}
-      uses: webfactory/ssh-agent@v0.5.4
-      with:
-        ssh-private-key: |
-          ${{ secrets.SSH_PRIVATE_KEY }}
+        java-version: '7'
 
     - name: Install repo
       run: |
-        mkdir -p ~/bin
-        curl -sS https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+        mkdir ~/bin
+        curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
         chmod a+x ~/bin/repo
         sudo ln -sf ~/bin/repo /usr/bin/repo
-        echo "repo installed to ~/bin/repo and /usr/bin/repo"
-
+      
     - name: Initialize repo
-      env:
-        REPO_PYTHON: /usr/bin/python
-      id: pwd
       run: |
         mkdir workspace
         cd workspace
         echo "workspace-folder=$(pwd)" >> $GITHUB_OUTPUT
-        git config --global user.name "azwhikaru"
-        git config --global user.email "azwhikaru+37921907@github.com"
-        export REPO_PYTHON=/usr/bin/python
-        repo init --depth=1 -u ${{ env.MANIFEST_URL }} -b ${{ env.MANIFEST_BRANCH }}
-
+        git config --global user.name "Nico170420"
+        git config --global user.email "b170420nc@gmail.com"
+        repo init --depth=1 -u ${{ github.event.inputs.MANIFEST_URL }} -b ${{ github.event.inputs.MANIFEST_BRANCH }}
+      id: pwd
+          
     - name: Repo Sync
-      env:
-        REPO_PYTHON: /usr/bin/python
       run: |
-        export REPO_PYTHON=/usr/bin/python
         repo sync -j$(nproc --all) --force-sync
       working-directory: workspace
-
-    - name: Checkout Device Tree (clone the device tree repo separately)
+      
+    - name: Clone device tree
       run: |
-        rm -rf $GITHUB_WORKSPACE/device-tree || true
-        git clone --depth=1 -b ${{ env.DEVICE_TREE_BRANCH }} ${{ env.DEVICE_TREE_URL }} $GITHUB_WORKSPACE/device-tree
-        ls -la $GITHUB_WORKSPACE/device-tree
-
-    - name: Copy device-tree into AOSP workspace device path (do NOT mv whole workspace)
-      run: |
-        WORKSPACE_DIR="${{ steps.pwd.outputs.workspace-folder }}"
-        TARGET_DIR="$WORKSPACE_DIR/${{ env.DEVICE_PATH }}"
-        echo "Workspace: $WORKSPACE_DIR"
-        echo "Target device path: $TARGET_DIR"
-        mkdir -p "$TARGET_DIR"
-        rsync -a --delete $GITHUB_WORKSPACE/device-tree/ "$TARGET_DIR/"
-        echo "Device tree copied to workspace device path"
-      env:
-        GITHUB_WORKSPACE: ${{ github.workspace }}
-
-    - name: Fix legacy build issues
-      run: |
-        # checkpolicy multiple definition
-        FILE1="workspace/external/checkpolicy/checkpolicy.h"
-        if grep -q 'te_assertions' "$FILE1"; then
-          sed -i 's/^.*te_assertions.*$/extern int te_assertions;/' "$FILE1"
-        fi
-
-        # nullptr is not available in this legacy build setup
-        FILE2="workspace/bootable/recovery/partition.cpp"
-        sed -i 's/\bnullptr\b/NULL/g' "$FILE2"
-
-        grep -n 'te_assertions\|nullptr\|NULL' "$FILE1" "$FILE2" || true
+        git clone ${{ github.event.inputs.DEVICE_TREE_URL }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} ./${{ github.event.inputs.DEVICE_PATH }}
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
     - name: Set Swap Space
       uses: pierotofy/set-swap-space@master
       with:
         swap-size-gb: 12
-        
-    - name: Remove unused language files
-      run: |
-             cd workspace
-             find bootable/recovery/gui/theme/common/languages/ \
-             -name "*.xml" ! -name "ja.xml" ! -name "en.xml" -delete
-
-
-    - name: Configure CCACHE
-      run: |
-        export USE_CCACHE=1
-        export CCACHE_DIR=${{ github.workspace }}/.ccache
-        mkdir -p $CCACHE_DIR
-        ccache -M 50G || true
 
     - name: Building recovery
       run: |
         source build/envsetup.sh
         export ALLOW_MISSING_DEPENDENCIES=true
-        export COMMON_GLOBAL_CFLAGS="-fcommon"
-        lunch ${{ env.MAKEFILE_NAME }}-eng
-        make clean
-        make ${{ env.BUILD_TARGET }}image -j$(nproc)
-      working-directory: workspace
+        lunch ${{ github.event.inputs.MAKEFILE_NAME }}-eng && make clean && make ${{ github.event.inputs.BUILD_TARGET }}image -j$(nproc --all)
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
     - name: Upload to Release
       uses: softprops/action-gh-release@v1
       with:
-        files: |
-          workspace/out/target/product/${{ env.DEVICE_NAME }}/${{ env.BUILD_TARGET }}.img
-          workspace/out/target/product/${{ env.DEVICE_NAME }}/*.zip
-          workspace/out/target/product/${{ env.DEVICE_NAME }}/*vendor*.img
-        name: ${{ env.DEVICE_NAME }}-${{ github.run_id }}
+        files: workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/${{ github.event.inputs.BUILD_TARGET }}.img
+        name: ${{ github.event.inputs.DEVICE_NAME }}-${{ github.run_id }}
         tag_name: ${{ github.run_id }}
         body: |
-          Manifest: ${{ env.MANIFEST_BRANCH }}
-          Device: ${{ env.DEVICE_NAME }}
-          Target: ${{ env.BUILD_TARGET }}.img
+          Manifest: ${{ github.event.inputs.MANIFEST_BRANCH }}
+          Device: ${{ github.event.inputs.DEVICE_NAME }}
+          Target: ${{ github.event.inputs.BUILD_TARGET }}.img
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
