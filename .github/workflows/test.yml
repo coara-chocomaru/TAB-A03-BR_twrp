@@ -118,9 +118,9 @@ jobs:
           
     - name: Repo Sync
       run: |
-        repo sync -j$(nproc --all) --force-sync
+        repo sync -j1 --force-sync --no-tags --no-clone-bundle --optimized-fetch --prune
       working-directory: android-recovery
-      
+  
     - name: Clone device tree
       run: |
         git clone ${{ inputs.DEVICE_TREE_URL }} -b ${{ inputs.DEVICE_TREE_BRANCH }} ./${{ inputs.DEVICE_PATH }}
