@@ -175,25 +175,13 @@ jobs:
         echo 'te_assert_t *te_assertions;' >> external/checkpolicy/checkpolicy.c
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
       
-    - name: Clean build directory
-      run: |
-        source build/envsetup.sh
-        lunch ${{ env.MAKEFILE_NAME }}-eng
-        make clean
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-
-    - name: Prebuild host dependencies (checkpolicy)
-      run: |
-        source build/envsetup.sh
-        lunch ${{ env.MAKEFILE_NAME }}-eng
-        make checkpolicy -j$(nproc --all)
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-
     - name: Building recovery
       run: |
         source build/envsetup.sh
         export ALLOW_MISSING_DEPENDENCIES=true
         lunch ${{ env.MAKEFILE_NAME }}-eng
+        make clean
+        make checkpolicy -j$(nproc --all)
         make ${{ env.BUILD_TARGET }}image -j$(nproc --all)
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
