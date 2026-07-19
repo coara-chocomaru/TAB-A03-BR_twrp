@@ -86,6 +86,12 @@ jobs:
             --exclude=.github \
             "${GITHUB_WORKSPACE}/" "/work/src/${DEVICE_PATH}/"
 
+      - name: Remove unused language files
+        working-directory: /work/src
+        run: |
+          find bootable/recovery/gui/theme/common/languages/ \
+            -name "*.xml" ! -name "ja.xml" ! -name "en.xml" -delete
+
       - name: Temporary exclusions for legacy TWRP
         working-directory: /work/src
         run: |
@@ -134,9 +140,47 @@ jobs:
       - name: Verify exclusions
         working-directory: /work/src
         run: |
-          if grep -RInE 'fsck\.exfat|fsck\.fat|libcrypto\.so|sgdisk|me\.twrp\.twrpapp\.apk' \
-            . --include='*.mk' --include='*.mak' --include='*.bp' --include='*.rc' --include='*.product' ; then
-            echo "Unwanted entries still remain."
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          patterns = [
+              re.compile(r'fsck\.exfat'),
+              re.compile(r'fsck\.fat'),
+              re.compile(r'libcrypto\.so'),
+              re.compile(r'sgdisk'),
+              re.compile(r'me\.twrp\.twrpapp\.apk'),
+          ]
+
+          exts = {".mk", ".mak", ".bp", ".rc", ".txt", ".product"}
+          bad = []
+
+          for p in Path(".").rglob("*"):
+              if not p.is_file() or p.suffix.lower() not in exts:
+                  continue
+              try:
+                  lines = p.read_text(encoding="utf-8", errors="ignore").splitlines()
+              except Exception:
+                  continue
+
+              for i, line in enumerate(lines, 1):
+                  if line.lstrip().startswith("#"):
+                      continue
+                  if any(rx.search(line) for rx in patterns):
+                      bad.append(f"{p}:{i}:{line}")
+
+          if bad:
+              print("\n".join(bad))
+              print("Unwanted non-comment entries still remain.")
+              sys.exit(1)
+          PY
+
+      - name: Sanity check envsetup
+        working-directory: /work/src
+        run: |
+          if [ ! -f build/envsetup.sh ]; then
+            echo "build/envsetup.sh is missing in Android root"
             exit 1
           fi
 
