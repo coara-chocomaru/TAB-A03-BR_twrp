@@ -16,7 +16,9 @@ env:
 jobs:
   build:
     if: github.event.repository.owner.id == github.event.sender.id
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:20.04
     permissions:
       contents: write
     steps:
@@ -41,19 +43,20 @@ jobs:
 
     - name: Prepare the environment
       run: |
-        sudo apt update
-        sudo apt -y upgrade
-        sudo apt -y install gperf gcc-multilib gcc-10-multilib g++-multilib g++-10-multilib libc6-dev \
+        apt update
+        apt -y upgrade
+        apt -y install gperf gcc-multilib gcc-10-multilib g++-multilib g++-10-multilib libc6-dev \
           lib32ncurses5-dev x11proto-core-dev libx11-dev tree lib32z-dev libgl1-mesa-dev libxml2-utils \
           xsltproc bc ccache lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev libsdl1.2-dev \
           libwxgtk3.0-gtk3-dev libxml2 lzop pngcrush schedtool squashfs-tools imagemagick \
-          libbz2-dev lzma ncftp qemu-user-static libstdc++-10-dev libncurses5 python3
+          libbz2-dev lzma ncftp qemu-user-static libstdc++-10-dev libncurses5 python3 \
+          git curl python2
+        update-alternatives --install /usr/bin/python python /usr/bin/python2 1 || true
 
     - name: Install OpenJDK
-      uses: actions/setup-java@v3
-      with:
-        distribution: 'zulu'
-        java-version: '8'
+      run: |
+        apt -y install openjdk-8-jdk
+        echo "JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64" >> $GITHUB_ENV
 
     - name: Setup SSH Keys
       if: ${{ startsWith(env.MANIFEST_URL, 'git@github.com') }}
@@ -67,7 +70,7 @@ jobs:
         mkdir -p ~/bin
         curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
         chmod a+x ~/bin/repo
-        sudo ln -sf ~/bin/repo /usr/bin/repo
+        ln -sf ~/bin/repo /usr/bin/repo
 
     - name: Initialize repo
       run: |
@@ -103,13 +106,7 @@ jobs:
           echo 'TW_NO_EXFAT := true' >> BoardConfig.mk
         fi
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-
-    - name: Patch Android.mk to drop unconditional FAT tools (fsck.fat/fatlabel/mkfs.fat)
-      run: |
-        cd bootable/recovery
-        sed -i '/^\s*fsck\.fat \\$/d; /^\s*fatlabel \\$/d; /^\s*mkfs\.fat \\$/d' Android.mk
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-
+      
     - name: Statically link libcrypto to eliminate standalone libcrypto.so
       run: |
         python3 - <<'PYEOF'
@@ -152,33 +149,13 @@ jobs:
       with:
         swap-size-gb: 12
 
-    - name: Switch to Python2
-      run: |
-        sudo apt -y install python2
-        sudo update-alternatives --install /usr/bin/python python /usr/bin/python2 1
-      continue-on-error: true
-
     - name: Remove unused language files
       run: |
              cd workspace
              find bootable/recovery/gui/theme/common/languages/ \
              -name "*.xml" ! -name "ja.xml" ! -name "en.xml" -delete
 
-    - name: Patch libselinux Android.mk (Force remove WHOLE)
-      run: |
-        cd external/libselinux
-        sed -i '/LOCAL_WHOLE_STATIC_LIBRARIES/d' Android.mk
-        sed -i '/^LOCAL_STATIC_LIBRARIES/d' Android.mk
-        echo 'LOCAL_STATIC_LIBRARIES := libpcre' >> Android.mk
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-
-    - name: Verify libselinux patch
-      run: |
-        echo "=== external/libselinux/Android.mk (libpcre lines) ==="
-        grep -n libpcre external/libselinux/Android.mk || echo "ERROR: libpcre not found!"
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-
-    - name: Fix GCC10+ fno-common host build failure
+    - name: Fix GCC10+ fno-common host build failure (optional for 20.04)
       run: |
         echo 'HOST_GLOBAL_CFLAGS += -fcommon' >> build/core/combo/HOST_linux-x86.mk
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
@@ -189,18 +166,11 @@ jobs:
         echo 'te_assert_t *te_assertions;' >> external/checkpolicy/checkpolicy.c
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
-    - name: Clean build directory (before prebuild)
+    - name: Clean build directory
       run: |
         source build/envsetup.sh
         lunch ${{ env.MAKEFILE_NAME }}-eng
         make clean
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-
-    - name: Prebuild host dependencies (libpcre, libselinux, checkpolicy)
-      run: |
-        source build/envsetup.sh
-        lunch ${{ env.MAKEFILE_NAME }}-eng
-        make checkpolicy -j$(nproc --all)
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
     - name: Building recovery
