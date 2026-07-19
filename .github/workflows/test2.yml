@@ -63,18 +63,6 @@ jobs:
         apt -y install openjdk-8-jdk
         echo "JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64" >> $GITHUB_ENV
 
-    - name: Create swap space manually
-      run: |
-        swapoff /swapfile || true
-        rm -f /swapfile
-        fallocate -l 12G /swapfile
-        chmod 600 /swapfile
-        mkswap /swapfile
-        swapon /swapfile
-        echo "Swap created:"
-        free -h
-        swapon --show
-
     - name: Setup SSH Keys
       if: ${{ startsWith(env.MANIFEST_URL, 'git@github.com') }}
       uses: webfactory/ssh-agent@v0.5.4
