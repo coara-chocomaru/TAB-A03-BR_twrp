@@ -174,7 +174,7 @@ jobs:
         sed -i 's/^te_assert_t \*te_assertions;/extern te_assert_t *te_assertions;/' external/checkpolicy/checkpolicy.h
         echo 'te_assert_t *te_assertions;' >> external/checkpolicy/checkpolicy.c
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-
+      
     - name: Clean build directory
       run: |
         source build/envsetup.sh
@@ -182,12 +182,11 @@ jobs:
         make clean
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
-    - name: Prebuild libpcre and libselinux
+    - name: Prebuild host dependencies (checkpolicy)
       run: |
         source build/envsetup.sh
         lunch ${{ env.MAKEFILE_NAME }}-eng
-        make -j4 libpcre
-        make libselinux
+        make checkpolicy -j$(nproc --all)
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
     - name: Building recovery
