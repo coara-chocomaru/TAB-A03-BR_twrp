@@ -154,6 +154,19 @@ jobs:
         mkdir -p $CCACHE_DIR
         ccache -M 50G || true
 
+    - name: Patch checkseapp to disable stringop-truncation error
+      shell: bash
+      run: |
+        cd external/sepolicy/tools
+        if grep -q '^LOCAL_CFLAGS' Android.mk; then
+          sed -i '/^LOCAL_CFLAGS/ s/$/ -Wno-error=stringop-truncation -Wno-stringop-truncation/' Android.mk
+        else
+          echo 'LOCAL_CFLAGS += -Wno-error=stringop-truncation -Wno-stringop-truncation' >> Android.mk
+        fi
+        echo "=== Android.mk after patch ==="
+        grep -n 'LOCAL_CFLAGS' Android.mk || true
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
     - name: Fix libselinux host static library (remove WHOLE)
       shell: bash
       run: |
