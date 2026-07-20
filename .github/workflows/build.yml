@@ -82,6 +82,7 @@ jobs:
           update-alternatives --install /usr/bin/python2 python2 /usr/bin/python2.7 1 || true
           echo "JAVA_HOME=/usr/lib/jvm/java-7-openjdk-amd64" >> "$GITHUB_ENV"
           echo "USE_CCACHE=1" >> "$GITHUB_ENV"
+          echo "JAVA_TOOL_OPTIONS=-Xbootclasspath/a:/usr/share/java/bcprov.jar" >> "$GITHUB_ENV"
 
       - name: Clone repository
         shell: bash
