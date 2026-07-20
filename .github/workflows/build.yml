@@ -155,36 +155,40 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          python3 - <<'PY'
+          python2 - <<'PY'
+          from __future__ import print_function
           import glob
           import json
           import os
-          import pathlib
-          import urllib.error
-          import urllib.parse
-          import urllib.request
+          import sys
+          import urllib2
+          import urllib
+          from urlparse import urlparse, parse_qs
 
           repo = os.environ["GITHUB_REPOSITORY"]
           token = os.environ["GITHUB_TOKEN"]
           run_id = os.environ["GITHUB_RUN_ID"]
           device = os.environ["DEVICE_NAME"]
           target = os.environ["BUILD_TARGET"]
-          body = f"Manifest: {os.environ['MANIFEST_BRANCH']}\nDevice: {device}\nTarget: {target}.img\n"
+          body = "Manifest: {0}\nDevice: {1}\nTarget: {2}.img\n".format(
+              os.environ["MANIFEST_BRANCH"], device, target
+          )
 
           patterns = [
-              f"workspace/out/target/product/{device}/{target}.img",
-              f"workspace/out/target/product/{device}/*.zip",
-              f"workspace/out/target/product/{device}/*vendor*.img",
+              "workspace/out/target/product/{0}/{1}.img".format(device, target),
+              "workspace/out/target/product/{0}/*.zip".format(device),
+              "workspace/out/target/product/{0}/*vendor*.img".format(device),
           ]
           assets = []
           for pattern in patterns:
               assets.extend(sorted(glob.glob(pattern)))
-          assets = [p for p in assets if pathlib.Path(p).is_file()]
+          # filter only files
+          assets = [p for p in assets if os.path.isfile(p)]
           if not assets:
-              raise SystemExit("No release assets found")
+              sys.exit("No release assets found")
 
           headers = {
-              "Authorization": f"Bearer {token}",
+              "Authorization": "Bearer {0}".format(token),
               "Accept": "application/vnd.github+json",
               "X-GitHub-Api-Version": "2022-11-28",
               "User-Agent": "python",
@@ -194,38 +198,41 @@ jobs:
               hdrs = dict(headers)
               if extra_headers:
                   hdrs.update(extra_headers)
-              req = urllib.request.Request(url, data=data, headers=hdrs, method=method)
-              return urllib.request.urlopen(req)
+              req = urllib2.Request(url, data=data, headers=hdrs)
+              req.get_method = lambda: method
+              return urllib2.urlopen(req)
 
-          release_api = f"https://api.github.com/repos/{repo}/releases"
+          release_api = "https://api.github.com/repos/{0}/releases".format(repo)
           payload = json.dumps({
               "tag_name": run_id,
-              "name": f"{device}-{run_id}",
+              "name": "{0}-{1}".format(device, run_id),
               "body": body,
               "draft": False,
               "prerelease": False,
           }).encode("utf-8")
 
           try:
-              with request(release_api, method="POST", data=payload, extra_headers={"Content-Type": "application/json"}) as resp:
-                  release = json.load(resp)
-          except urllib.error.HTTPError as e:
+              resp = request(release_api, method="POST", data=payload,
+                             extra_headers={"Content-Type": "application/json"})
+              release = json.loads(resp.read())
+          except urllib2.HTTPError as e:
               if e.code == 422:
-                  with request(f"{release_api}/tags/{run_id}") as resp:
-                      release = json.load(resp)
+                  # release already exists, fetch it
+                  resp = request("{0}/tags/{1}".format(release_api, run_id))
+                  release = json.loads(resp.read())
               else:
                   raise
 
           upload_url = release["upload_url"].split("{", 1)[0]
           for asset in assets:
               name = os.path.basename(asset)
-              url = f"{upload_url}?{urllib.parse.urlencode({'name': name})}"
+              url = "{0}?{1}".format(upload_url, urllib.urlencode({"name": name}))
               with open(asset, "rb") as f:
                   data = f.read()
-              with request(url, method="POST", data=data, extra_headers={
+              resp = request(url, method="POST", data=data, extra_headers={
                   "Content-Type": "application/octet-stream",
                   "Content-Length": str(len(data)),
-              }) as resp:
-                  print(f"uploaded {name}: {resp.status}")
+              })
+              print("uploaded {0}: {1}".format(name, resp.getcode()))
           print("release complete")
           PY
