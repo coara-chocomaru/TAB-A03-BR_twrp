@@ -150,6 +150,9 @@ jobs:
           sed -i '\#ro.adb.secure=1/ro.adb.secure=0#r /tmp/strip_recovery_ramdisk.mk' build/core/Makefile
           grep -n -A1 "ro.adb.secure=1/ro.adb.secure=0" build/core/Makefile
 
+          sed -i 's#\$(MINIGZIP) < \$(recovery_uncompressed_ramdisk) > \$@#$(MINIGZIP) -9 < $(recovery_uncompressed_ramdisk) > $@#' build/core/Makefile
+          grep -n "MINIGZIP.*recovery_uncompressed_ramdisk" build/core/Makefile
+
       - name: Building recovery
         shell: bash
         working-directory: ${{ steps.pwd.outputs.workspace-folder }}
