@@ -133,9 +133,11 @@ jobs:
         working-directory: ${{ steps.pwd.outputs.workspace-folder }}
         run: |
           set -euxo pipefail
+          set +u
           source build/envsetup.sh
-          export ALLOW_MISSING_DEPENDENCIES=true
           lunch "${{ env.MAKEFILE_NAME }}-eng"
+          set -u
+          export ALLOW_MISSING_DEPENDENCIES=true
           make "${{ env.BUILD_TARGET }}image" -j2
 
       - name: Upload to Release
