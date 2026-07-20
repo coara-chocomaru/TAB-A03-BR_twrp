@@ -154,6 +154,12 @@ jobs:
         mkdir -p $CCACHE_DIR
         ccache -M 50G || true
 
+    - name: Fix build/core/definitions.mk to prevent double path in WHOLE linking
+      shell: bash
+      run: |
+        sed -i 's|filelist="$$filelist $$ldir/$$f"; \\|filelist="$$filelist $$f"; \\|g' build/core/definitions.mk
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
     - name: Building recovery
       run: |
         source build/envsetup.sh
