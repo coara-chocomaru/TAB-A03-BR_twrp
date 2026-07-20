@@ -162,8 +162,9 @@ jobs:
             STRIP_BIN="$(find prebuilts -type f -name '*-strip' 2>/dev/null | head -n1)"
           fi
           if [ -n "${STRIP_BIN}" ] && [ -x "${STRIP_BIN}" ] && [ -d "${RECOVERY_ROOT}" ]; then
-            find "${RECOVERY_ROOT}" -type f \( -path "*/sbin/*" -o -name "*.so" \) -print0 \
-              | xargs -0 -I{} sh -c '"'"'"$1" --strip-unneeded "$2" 2>/dev/null || true'"'"' _ "${STRIP_BIN}" {}
+            while IFS= read -r -d '' f; do
+              "${STRIP_BIN}" --strip-unneeded "${f}" 2>/dev/null || true
+            done < <(find "${RECOVERY_ROOT}" -type f \( -path "*/sbin/*" -o -name "*.so" \) -print0)
             touch "${RECOVERY_ROOT_TS}"
           else
             echo "TARGET_STRIP not found, skipping ramdisk symbol stripping"
