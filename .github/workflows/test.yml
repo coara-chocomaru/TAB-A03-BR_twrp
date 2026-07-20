@@ -325,14 +325,9 @@ jobs:
       shell: bash
       run: |
         source build/envsetup.sh
-        export NO_DEBUG_SYMBOLS=true
-        export WITH_DEBUG_SYMBOLS=false
-        export STRIP=true
-        export TARGET_STRIP=true
-        export TARGET_CFLAGS+="-Os -ffunction-sections -fdata-sections -fno-unwind-tables"
-        export TARGET_LDFLAGS+="-Wl,--gc-sections -Wl,--strip-all"
+        WITH_DEBUG_SYMBOLS=false
         export ALLOW_MISSING_DEPENDENCIES=true
-        lunch ${{ env.MAKEFILE_NAME }}-eng
+        lunch ${{ env.MAKEFILE_NAME }}-userdebug
         make ${{ env.BUILD_TARGET }}image -j2
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
