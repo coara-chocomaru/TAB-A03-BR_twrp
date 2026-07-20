@@ -106,36 +106,6 @@ jobs:
         mkdir -p workspace/${{ env.DEVICE_PATH }}
         ls | grep -v workspace | xargs -I{} mv {} workspace/${{ env.DEVICE_PATH }}
 
-    - name: Patch BoardConfig with the correct exclusion flags
-      shell: bash
-      run: |
-        cd ${{ env.DEVICE_PATH }}
-        if grep -q '^BOARD_HAS_NO_REAL_SDCARD' BoardConfig.mk; then
-          sed -i 's/^BOARD_HAS_NO_REAL_SDCARD.*/BOARD_HAS_NO_REAL_SDCARD := true/' BoardConfig.mk
-        else
-          echo 'BOARD_HAS_NO_REAL_SDCARD := true' >> BoardConfig.mk
-        fi
-        if grep -q '^TW_NO_EXFAT ' BoardConfig.mk || grep -q '^TW_NO_EXFAT:' BoardConfig.mk; then
-          sed -i 's/^TW_NO_EXFAT .*/TW_NO_EXFAT := true/' BoardConfig.mk
-        else
-          echo 'TW_NO_EXFAT := true' >> BoardConfig.mk
-        fi
-
-        # Keep the footprint down without changing the recovery flow.
-        for flag in \
-          TW_EXCLUDE_BASH \
-          TW_EXCLUDE_NANO \
-          TW_EXCLUDE_TWRPAPP \
-          TW_EXCLUDE_ENCRYPTED_BACKUP
-        do
-          if grep -q "^${flag}" BoardConfig.mk; then
-            sed -i "s/^${flag}.*/${flag} := true/" BoardConfig.mk
-          else
-            echo "${flag} := true" >> BoardConfig.mk
-          fi
-        done
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-
     - name: Patch Android.mk to drop unconditional FAT tools
       shell: bash
       run: |
