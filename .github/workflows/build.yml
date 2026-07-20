@@ -130,6 +130,13 @@ jobs:
             ! -name .git \
             -exec mv -t "workspace/${{ env.DEVICE_PATH }}" -- {} +
 
+      - name: Patch legacy nullptr build error
+        shell: bash
+        working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+        run: |
+          set -euxo pipefail
+          sed -i 's/nullptr/NULL/g' bootable/recovery/partition.cpp
+
       - name: Building recovery
         shell: bash
         working-directory: ${{ steps.pwd.outputs.workspace-folder }}
