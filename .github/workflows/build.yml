@@ -74,6 +74,7 @@ jobs:
             libxml2 lzop pngcrush schedtool squashfs-tools imagemagick \
             libbz2-dev lzma ncftp qemu-user-static libncurses5 \
             python git curl python2.7 debconf-utils openjdk-7-jdk \
+            libbcprov-java \
             make m4 bison flex libssl-dev libtool autoconf automake gawk \
             ca-certificates
 
