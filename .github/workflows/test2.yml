@@ -151,7 +151,7 @@ jobs:
           lunch "${{ env.MAKEFILE_NAME }}-eng"
           set -u
           export ALLOW_MISSING_DEPENDENCIES=true
-          OUT_DIR="out/target/product/${{ env.DEVICE_NAME }}"
+          OUT_DIR="${PWD}/out/target/product/${{ env.DEVICE_NAME }}"
           RECOVERY_ROOT_TS="${OUT_DIR}/recovery/root.ts"
           RECOVERY_ROOT="${OUT_DIR}/recovery/root"
 
