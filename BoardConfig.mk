@@ -115,7 +115,7 @@ BOARD_SUPPRESS_EMMC_WIPE := true
 TARGET_RECOVERY_FSTAB := $(DEVICE_PATH)/recovery/root/etc/recovery.fstab
 BOARD_HAS_NO_REAL_SDCARD := true
 TW_NO_EXFAT := true
-
+RECOVERY_FSTAB_VERSION := 2
 
 # Security patch level
 # VENDOR_SECURITY_PATCH := 2018-03-05
@@ -135,6 +135,8 @@ TW_BRIGHTNESS_PATH := /sys/devices/platform/panel_vx5b1d.19/backlight/lcd-bl/bri
 TW_INCLUDE_CRYPTO := false
 TW_USE_TOOLBOX := false
 TW_THEME := landscape_mdpi
+TW_SCREEN_WIDTH := 1280
+TW_SCREEN_HEIGHT := 800
 TW_EXTRA_LANGUAGES := false
 TW_USE_INPUT_EVENTS := true
 TW_INCLUDE_INJECTTWRP := false
@@ -167,3 +169,7 @@ TW_INCLUDE_DUMLOCK := false
 TARGET_USES_LOGD := false
 TWRP_INCLUDE_LOGCAT := false
 TW_NO_REBOOT_BOOTLOADER := true
+TW_INTERNAL_STORAGE_PATH := "/data/media/0"
+TW_INTERNAL_STORAGE_MOUNT_POINT := "data"
+TW_EXTERNAL_STORAGE_PATH := "/external_sd"
+TW_EXTERNAL_STORAGE_MOUNT_POINT := "external_sd"
