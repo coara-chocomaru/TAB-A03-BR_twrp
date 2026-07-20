@@ -191,29 +191,16 @@ jobs:
         sed -i 's|filelist="$$filelist $$ldir/$$f"; \\|filelist="$$filelist $$f"; \\|g' build/core/definitions.mk
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
       
-    - name: Patch checkseapp to disable stringop-truncation error
-      shell: bash
-      run: |
-        cd external/sepolicy/tools
-        if grep -q '^LOCAL_CFLAGS' Android.mk; then
-          sed -i '/^LOCAL_CFLAGS/ s/$/ -Wno-error=stringop-truncation -Wno-stringop-truncation/' Android.mk
-        else
-          echo 'LOCAL_CFLAGS += -Wno-error=stringop-truncation -Wno-stringop-truncation' >> Android.mk
-        fi
-        echo "=== Android.mk after patch ==="
-        grep -n 'LOCAL_CFLAGS' Android.mk || true
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-    - name: Fix libselinux host static library (remove WHOLE)
+    - name: Fix libselinux (remove ALL WHOLE_STATIC_LIBRARIES)
       shell: bash
       run: |
         cd external/libselinux
-        sed -i '/include $(BUILD_HOST_STATIC_LIBRARY)/{s/^LOCAL_WHOLE_STATIC_LIBRARIES := libpcre/LOCAL_STATIC_LIBRARIES += libpcre/}' Android.mk
-        if grep -q 'LOCAL_WHOLE_STATIC_LIBRARIES' Android.mk; then
-          echo "WARNING: LOCAL_WHOLE_STATIC_LIBRARIES still exists!"
-          grep -n 'LOCAL_WHOLE_STATIC_LIBRARIES' Android.mk
-        fi
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-      
+        sed -i '/^LOCAL_WHOLE_STATIC_LIBRARIES/d' Android.mk
+        sed -i '/include $(BUILD_STATIC_LIBRARY)/i LOCAL_STATIC_LIBRARIES += libpcre' Android.mk
+        sed -i '/include $(BUILD_HOST_STATIC_LIBRARY)/i LOCAL_STATIC_LIBRARIES += libpcre' Android.mk
+        echo "=== Patched Android.mk (lines containing libpcre) ==="
+        grep -n 'libpcre' Android.mk || true
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}      
     - name: Building recovery
       shell: bash
       run: |
