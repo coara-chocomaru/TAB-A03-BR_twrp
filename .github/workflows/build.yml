@@ -39,6 +39,7 @@ jobs:
           echo "Build Target: ${{ env.BUILD_TARGET }}.img"
           echo "::endgroup::"
 
+
       - name: Prepare the environment
         env:
           DEBIAN_FRONTEND: noninteractive
@@ -67,7 +68,10 @@ jobs:
             libc6-dev lib32ncurses5-dev x11proto-core-dev libx11-dev tree \
             lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc bc ccache \
             lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev \
-            libsdl1.2-dev libwxgtk3.0-gtk3-dev libwxgtk3.0-dev libwxgtk2.8-dev \
+            libsdl1.2-dev \
+            libwxbase3.0-0 libwxbase3.0-dev \
+            libwxgtk3.0-0 libwxgtk3.0-dev \
+            wx3.0-headers wx-common \
             libxml2 lzop pngcrush schedtool squashfs-tools imagemagick \
             libbz2-dev lzma ncftp qemu-user-static libncurses5 \
             python git curl python2.7 debconf-utils openjdk-7-jdk \
