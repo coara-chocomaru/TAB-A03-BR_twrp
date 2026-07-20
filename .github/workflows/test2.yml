@@ -171,6 +171,11 @@ jobs:
         sed -i 's/^te_assert_t \*te_assertions;/extern te_assert_t *te_assertions;/' external/checkpolicy/checkpolicy.h
         echo 'te_assert_t *te_assertions;' >> external/checkpolicy/checkpolicy.c
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+  
+    - name: Set Swap Space
+      uses: pierotofy/set-swap-space@master
+      with:
+        swap-size-gb: 12
 
     - name: Clean build directory
       run: |
