@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+
 env:
   MANIFEST_URL: 'https://github.com/minimal-manifest-twrp/platform_manifest_twrp_omni'
   MANIFEST_BRANCH: 'twrp-5.1'
@@ -13,6 +14,7 @@ env:
   DEVICE_NAME: 'a03br'
   MAKEFILE_NAME: 'omni_a03br'
   BUILD_TARGET: 'recovery'
+
 jobs:
   build:
     if: github.event.repository.owner.id == github.event.sender.id
@@ -21,6 +23,7 @@ jobs:
       image: ubuntu:20.04
     permissions:
       contents: write
+
     steps:
     - name: Display Run Parameters
       shell: bash
@@ -119,7 +122,7 @@ jobs:
         fi
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
-    - name: Patch Android.mk to drop unconditional FAT tools (fsck.fat/fatlabel/mkfs.fat)
+    - name: Patch Android.mk to drop unconditional FAT tools
       shell: bash
       run: |
         cd bootable/recovery
@@ -131,7 +134,6 @@ jobs:
       run: |
         python3 - <<'PYEOF'
         import re, glob
-
         word = re.compile(r'(?<![\w.])libcrypto(?![\w.])')
         patched = []
         for path in glob.glob('bootable/recovery/**/Android.mk', recursive=True):
@@ -168,9 +170,9 @@ jobs:
     - name: Remove unused language files
       shell: bash
       run: |
-             cd workspace
-             find bootable/recovery/gui/theme/common/languages/ \
-             -name "*.xml" ! -name "ja.xml" ! -name "en.xml" -delete
+        cd workspace
+        find bootable/recovery/gui/theme/common/languages/ \
+        -name "*.xml" ! -name "ja.xml" ! -name "en.xml" -delete
 
     - name: Fix GCC10+ fno-common host build failure
       shell: bash
@@ -190,7 +192,7 @@ jobs:
       run: |
         sed -i 's|filelist="$$filelist $$ldir/$$f"; \\|filelist="$$filelist $$f"; \\|g' build/core/definitions.mk
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-      
+
     - name: Fix libselinux (remove ALL WHOLE_STATIC_LIBRARIES)
       shell: bash
       run: |
@@ -198,20 +200,19 @@ jobs:
         sed -i '/^LOCAL_WHOLE_STATIC_LIBRARIES/d' Android.mk
         sed -i '/include $(BUILD_STATIC_LIBRARY)/i LOCAL_STATIC_LIBRARIES += libpcre' Android.mk
         sed -i '/include $(BUILD_HOST_STATIC_LIBRARY)/i LOCAL_STATIC_LIBRARIES += libpcre' Android.mk
-        echo "=== Patched Android.mk (lines containing libpcre) ==="
-        grep -n 'libpcre' Android.mk || true
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-      
-    - name: Fix checkseapp source code (replace strncat with memcpy)
+
+    - name: Fix checkseapp Android.mk to disable stringop-truncation warnings
       shell: bash
       run: |
         cd external/sepolicy/tools
-        sed -i 's/strncat(new_map->key, k->key, key_len);/memcpy(new_map->key + new_map->len, k->key, key_len); new_map->len += key_len; new_map->key[new_map->len] = '\''\0'\'';/' check_seapp.c
-        sed -i 's/strncat(new_map->key, k->value, val_len);/memcpy(new_map->key + new_map->len, k->value, val_len); new_map->len += val_len; new_map->key[new_map->len] = '\''\0'\'';/' check_seapp.c
-        echo "=== check_seapp.c after patch (lines around memcpy) ==="
-        grep -B2 -A2 'memcpy' check_seapp.c | head -20 || true
+        if grep -q '^LOCAL_CFLAGS' Android.mk; then
+          sed -i 's/^LOCAL_CFLAGS.*/& -Wno-error=stringop-truncation -Wno-stringop-truncation/' Android.mk
+        else
+          echo 'LOCAL_CFLAGS := -Wno-error=stringop-truncation -Wno-stringop-truncation' >> Android.mk
+        fi
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-      
+
     - name: Building recovery
       shell: bash
       run: |
