@@ -283,6 +283,52 @@ jobs:
         PYEOF
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
+    - name: Ensure libpcre is linked wherever libselinux is statically linked
+      shell: bash
+      run: |
+        FILES=$(grep -rl --include=Android.mk 'libselinux' . 2>/dev/null | xargs grep -l 'LOCAL_STATIC_LIBRARIES' 2>/dev/null || true)
+        if [ -z "$FILES" ]; then
+          echo "no candidate Android.mk found"
+          exit 0
+        fi
+        python3 - "$FILES" <<'PYEOF'
+        import re, sys
+
+        files = sys.argv[1].split('\n')
+        marker = 'include $(CLEAR_VARS)'
+        patched = []
+        for path in files:
+            if not path:
+                continue
+            with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+            parts = content.split(marker)
+            changed = False
+            for i in range(1, len(parts)):
+                block = parts[i]
+                m = re.search(r'(?m)^(LOCAL_STATIC_LIBRARIES\s*(:=|\+=)\s*)((?:[^\n\\]|\\\n)*)$', block)
+                if not m:
+                    continue
+                value = m.group(3)
+                if 'libselinux' in value and 'libpcre' not in value:
+                    new_value = value.rstrip()
+                    if new_value.endswith('\\'):
+                        new_value = new_value[:-1].rstrip() + ' libpcre \\'
+                    else:
+                        new_value = new_value + ' libpcre'
+                    new_line = m.group(1) + new_value
+                    block = block[:m.start()] + new_line + block[m.end():]
+                    parts[i] = block
+                    changed = True
+            if changed:
+                content = marker.join(parts)
+                with open(path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                patched.append(path)
+        print('libpcre linkage ensured in:', patched)
+        PYEOF
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
     - name: Building recovery
       shell: bash
       run: |
