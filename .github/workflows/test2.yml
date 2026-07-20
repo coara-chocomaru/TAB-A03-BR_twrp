@@ -195,6 +195,12 @@ jobs:
         echo 'te_assert_t *te_assertions;' >> external/checkpolicy/checkpolicy.c
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
+    - name: Fix build/core/definitions.mk to prevent double path in WHOLE linking
+      shell: bash
+      run: |
+        sed -i 's|filelist="$$filelist $$ldir/$$f"; \\|filelist="$$filelist $$f"; \\|g' build/core/definitions.mk
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+    
     - name: Building recovery
       shell: bash
       run: |
