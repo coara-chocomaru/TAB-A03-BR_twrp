@@ -8,8 +8,9 @@
 LOCAL_PATH := $(call my-dir)
 
 ifeq ($(TARGET_DEVICE),a03br)
-TARGET_SCREEN_WIDTH := 1280
-TARGET_SCREEN_HEIGHT := 800
+TARGET_STRIP=true
+TARGET_CFLAGS+="-Os -ffunction-sections -fdata-sections -fno-unwind-tables"
+TARGET_LDFLAGS+="-Wl,--gc-sections -Wl,--strip-all"
 JAVA_SDK_ENFORCEMENT_ERROR := false
 include $(call all-subdir-makefiles,$(LOCAL_PATH))
 endif
