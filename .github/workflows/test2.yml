@@ -220,12 +220,14 @@ jobs:
         fi
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
-    - name: Fix init to link libpcre explicitly
+    - name: Fix init to link libpcre explicitly (safely)
       shell: bash
       run: |
         cd system/core/init
         if grep -q '^LOCAL_STATIC_LIBRARIES' Android.mk; then
-          sed -i '/^LOCAL_STATIC_LIBRARIES/ s/$/ libpcre/' Android.mk
+          if ! grep -q 'libpcre' Android.mk; then
+            sed -i '/^LOCAL_STATIC_LIBRARIES/ s/$/ libpcre/' Android.mk
+          fi
         else
           sed -i '/LOCAL_MODULE := init/ a LOCAL_STATIC_LIBRARIES := libpcre' Android.mk
         fi
