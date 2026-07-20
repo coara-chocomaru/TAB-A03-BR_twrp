@@ -155,6 +155,7 @@ jobs:
                 with open(path, 'w', encoding='utf-8') as f:
                     f.write('\n'.join(out_lines))
                 patched.append(path)
+        print(patched)
         PYEOF
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
@@ -187,15 +188,47 @@ jobs:
         echo 'te_assert_t *te_assertions;' >> external/checkpolicy/checkpolicy.c
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
-    - name: Fix libselinux (remove WHOLE and export libpcre dependency)
+    - name: Fix libselinux static libpcre linkage per module block
       shell: bash
       run: |
-        cd external/libselinux
-        sed -i '/^LOCAL_WHOLE_STATIC_LIBRARIES/d' Android.mk
-        sed -i '/include $(BUILD_STATIC_LIBRARY)/i LOCAL_STATIC_LIBRARIES += libpcre' Android.mk
-        sed -i '/include $(BUILD_HOST_STATIC_LIBRARY)/i LOCAL_STATIC_LIBRARIES += libpcre' Android.mk
-        sed -i '/include $(BUILD_STATIC_LIBRARY)/i LOCAL_EXPORT_STATIC_LIBRARIES := libpcre' Android.mk
-        sed -i '/include $(BUILD_HOST_STATIC_LIBRARY)/i LOCAL_EXPORT_STATIC_LIBRARIES := libpcre' Android.mk
+        python3 - <<'PYEOF'
+        import re
+
+        path = 'external/libselinux/Android.mk'
+        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+
+        marker = 'include $(CLEAR_VARS)'
+        parts = content.split(marker)
+        patched_blocks = 0
+        for i in range(1, len(parts)):
+            block = parts[i]
+            if re.search(r'(?m)^LOCAL_WHOLE_STATIC_LIBRARIES\s*(:=|\+=)\s*libpcre\s*$', block):
+                block = re.sub(r'(?m)^LOCAL_WHOLE_STATIC_LIBRARIES\s*(:=|\+=)\s*libpcre\s*\n', '', block)
+                block, count = re.subn(
+                    r'(?m)^include \$\(BUILD_(HOST_)?(STATIC|SHARED)_LIBRARY\)\s*$',
+                    lambda m: 'LOCAL_STATIC_LIBRARIES += libpcre\nLOCAL_EXPORT_STATIC_LIBRARIES += libpcre\n' + m.group(0),
+                    block,
+                    count=1,
+                )
+                block, count2 = re.subn(
+                    r'(?m)^include \$\(BUILD_HOST_EXECUTABLE\)\s*$',
+                    lambda m: 'LOCAL_STATIC_LIBRARIES += libpcre\n' + m.group(0),
+                    block,
+                    count=(0 if count else 1),
+                )
+                if count or count2:
+                    patched_blocks += 1
+                parts[i] = block
+
+        content = marker.join(parts)
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        print('libselinux Android.mk: patched blocks =', patched_blocks)
+
+        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+            print(f.read())
+        PYEOF
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
     - name: Fix checkseapp Android.mk to disable stringop-truncation warnings
@@ -220,20 +253,34 @@ jobs:
         fi
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
-    - name: Revert and fix init Android.mk
+    - name: Fix init Android.mk libpcre linkage safely
       shell: bash
       run: |
-        cd system/core/init
-        git checkout -- Android.mk
-        if grep -q '^LOCAL_STATIC_LIBRARIES' Android.mk; then
-          if ! grep -q 'libpcre' Android.mk; then
-            sed -i '/^LOCAL_STATIC_LIBRARIES/ s/$/ libpcre/' Android.mk
-          fi
-        else
-          sed -i '/^LOCAL_MODULE := init/ a LOCAL_STATIC_LIBRARIES := libpcre' Android.mk
-        fi
-        echo "=== init Android.mk after patch ==="
-        grep -n 'LOCAL_STATIC_LIBRARIES' Android.mk || true
+        python3 - <<'PYEOF'
+        import re
+
+        path = 'system/core/init/Android.mk'
+        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+
+        if 'libpcre' in content:
+            print('init Android.mk already references libpcre, skipping')
+        else:
+            new_content, count = re.subn(
+                r'(?m)^include \$\(BUILD_EXECUTABLE\)\s*$',
+                lambda m: 'LOCAL_STATIC_LIBRARIES += libpcre\n' + m.group(0),
+                content,
+                count=1,
+            )
+            if count == 0:
+                raise SystemExit('init Android.mk: include $(BUILD_EXECUTABLE) not found, manual review required')
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write(new_content)
+            print('init Android.mk patched')
+
+        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+            print(f.read())
+        PYEOF
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
     - name: Building recovery
