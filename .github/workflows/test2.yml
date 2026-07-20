@@ -172,11 +172,20 @@ jobs:
              find bootable/recovery/gui/theme/common/languages/ \
              -name "*.xml" ! -name "ja.xml" ! -name "en.xml" -delete
 
-    - name: Fix GCC10+ fno-common and stringop-truncation host build failures
+    - name: Fix GCC10+ fno-common host build failure
       shell: bash
       run: |
         echo 'HOST_GLOBAL_CFLAGS += -fcommon' >> build/core/combo/HOST_linux-x86.mk
-        echo 'HOST_GLOBAL_CFLAGS += -Wno-error=stringop-truncation' >> build/core/combo/HOST_linux-x86.mk
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
+    - name: Patch checkseapp to disable stringop-truncation error
+      shell: bash
+      run: |
+        cd external/sepolicy/tools
+        sed -i '/^LOCAL_CFLAGS/ s/$/ -Wno-error=stringop-truncation -Wno-stringop-truncation/' Android.mk
+        if ! grep -q '^LOCAL_CFLAGS' Android.mk; then
+          echo 'LOCAL_CFLAGS += -Wno-error=stringop-truncation -Wno-stringop-truncation' >> Android.mk
+        fi
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
     - name: Patch checkpolicy.h to fix GCC10+ multiple definition error
