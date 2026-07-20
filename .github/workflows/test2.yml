@@ -146,12 +146,31 @@ jobs:
         working-directory: ${{ steps.pwd.outputs.workspace-folder }}
         run: |
           set -euxo pipefail
-          printf '\t$(hide) find $(TARGET_RECOVERY_ROOT_OUT) -type f \\( -path "*/sbin/*" -o -name "*.so" \\) -exec $(TARGET_STRIP) --strip-unneeded {} \\; >/dev/null 2>&1 ; true\n' > /tmp/strip_recovery_ramdisk.mk
+          printf '\t$(hide) find $(TARGET_RECOVERY_ROOT_OUT) -type f \\( -path "*/sbin/*" -o -name "*.so" \\) -exec $(TARGET_STRIP) --strip-unneeded {} \\; >/dev/null 2>&1 ; find $(TARGET_RECOVERY_ROOT_OUT) -type f \\( -path "*/sbin/*" -o -name "*.so" \\) -exec $(TARGET_2ND_STRIP) --strip-unneeded {} \\; >/dev/null 2>&1 ; true\n' > /tmp/strip_recovery_ramdisk.mk
           sed -i '\#ro.adb.secure=1/ro.adb.secure=0#r /tmp/strip_recovery_ramdisk.mk' build/core/Makefile
           grep -n -A1 "ro.adb.secure=1/ro.adb.secure=0" build/core/Makefile
 
           sed -i 's#\$(MINIGZIP) < \$(recovery_uncompressed_ramdisk) > \$@#$(MINIGZIP) -9 < $(recovery_uncompressed_ramdisk) > $@#' build/core/Makefile
           grep -n "MINIGZIP.*recovery_uncompressed_ramdisk" build/core/Makefile
+
+      - name: Append size-optimized build flags to BoardConfig.mk
+        shell: bash
+        working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+        run: |
+          set -euxo pipefail
+          cat >> "${{ env.DEVICE_PATH }}/BoardConfig.mk" <<'EOF'
+
+          TW_EXCLUDE_LZMA := true
+
+          TARGET_GLOBAL_CFLAGS += -Os -ffunction-sections -fdata-sections
+          TARGET_GLOBAL_CPPFLAGS += -Os -ffunction-sections -fdata-sections
+          TARGET_GLOBAL_LDFLAGS += -Wl,--gc-sections
+
+          TARGET_2ND_GLOBAL_CFLAGS += -Os -ffunction-sections -fdata-sections
+          TARGET_2ND_GLOBAL_CPPFLAGS += -Os -ffunction-sections -fdata-sections
+          TARGET_2ND_GLOBAL_LDFLAGS += -Wl,--gc-sections
+          EOF
+          tail -n 15 "${{ env.DEVICE_PATH }}/BoardConfig.mk"
 
       - name: Building recovery
         shell: bash
