@@ -25,107 +25,161 @@ jobs:
       contents: write
 
     steps:
-    - name: Display Run Parameters
-      shell: bash
-      run: |
-        echo "::group::User Environment Variables"
-        echo "Manifest URL: ${{ env.MANIFEST_URL }}"
-        echo "Manifest Branch: ${{ env.MANIFEST_BRANCH }}"
-        echo "Device Tree URL: ${{ env.DEVICE_TREE_URL }}"
-        echo "Device Tree Branch: ${{ env.DEVICE_TREE_BRANCH }}"
-        echo "Device Path: ${{ env.DEVICE_PATH }}"
-        echo "Device Name: ${{ env.DEVICE_NAME }}"
-        echo "Makefile Name: ${{ env.MAKEFILE_NAME }}"
-        echo "Build Target: ${{ env.BUILD_TARGET }}.img"
-        echo "::endgroup::"
+      - name: Display Run Parameters
+        shell: bash
+        run: |
+          echo "::group::User Environment Variables"
+          echo "Manifest URL: ${{ env.MANIFEST_URL }}"
+          echo "Manifest Branch: ${{ env.MANIFEST_BRANCH }}"
+          echo "Device Tree URL: ${{ env.DEVICE_TREE_URL }}"
+          echo "Device Tree Branch: ${{ env.DEVICE_TREE_BRANCH }}"
+          echo "Device Path: ${{ env.DEVICE_PATH }}"
+          echo "Device Name: ${{ env.DEVICE_NAME }}"
+          echo "Makefile Name: ${{ env.MAKEFILE_NAME }}"
+          echo "Build Target: ${{ env.BUILD_TARGET }}.img"
+          echo "::endgroup::"
 
-    - name: Check Out
-      uses: actions/checkout@v3
+      - name: Prepare the environment
+        env:
+          DEBIAN_FRONTEND: noninteractive
+          TZ: UTC
+        shell: bash
+        run: |
+          apt update
+          echo "tzdata tzdata/Areas select Etc" | debconf-set-selections
+          echo "tzdata tzdata/Zones/Etc select UTC" | debconf-set-selections
+          apt -y install             gperf gcc-multilib g++-multilib             libc6-dev lib32ncurses5-dev x11proto-core-dev libx11-dev tree             lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc bc ccache             lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev             libsdl1.2-dev libwxgtk3.0-gtk3-dev libxml2 lzop pngcrush             schedtool squashfs-tools imagemagick libbz2-dev lzma ncftp             qemu-user-static libncurses5 python3 git curl             python2 debconf-utils openjdk-8-jdk make m4 bison flex             libssl-dev libtool autoconf automake gawk
+          update-alternatives --install /usr/bin/python python /usr/bin/python2.7 1 || true
+          echo "JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64" >> $GITHUB_ENV
 
-    - name: Cleanup
-      uses: rokibhasansagar/slimhub_actions@main
+      - name: Clone repository
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          git clone --depth=1 "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" .
 
-    - name: Prepare the environment
-      env:
-        DEBIAN_FRONTEND: noninteractive
-        TZ: UTC
-      shell: bash
-      run: |
-        apt update
-        apt -y upgrade
-        echo "tzdata tzdata/Areas select Etc" | debconf-set-selections
-        echo "tzdata tzdata/Zones/Etc select UTC" | debconf-set-selections
-        apt -y install \
-          gperf gcc-multilib g++-multilib \
-          libc6-dev lib32ncurses5-dev x11proto-core-dev libx11-dev tree \
-          lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc bc ccache \
-          lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev \
-          libsdl1.2-dev libwxgtk3.0-gtk3-dev libxml2 lzop pngcrush \
-          schedtool squashfs-tools imagemagick libbz2-dev lzma ncftp \
-          python debconf-utils openjdk-8-jdk make m4 bison flex \
-          libssl-dev libtool autoconf automake gawk
-        update-alternatives --install /usr/bin/python python /usr/bin/python2.7 1 || true
-        echo "JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64" >> $GITHUB_ENV
+      - name: Install repo
+        shell: bash
+        run: |
+          mkdir -p ~/bin
+          curl -L https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+          chmod a+x ~/bin/repo
+          ln -sf ~/bin/repo /usr/bin/repo
 
-    - name: Setup SSH Keys
-      if: ${{ startsWith(env.MANIFEST_URL, 'git@github.com') }}
-      uses: webfactory/ssh-agent@v0.5.4
-      with:
-          ssh-private-key: |
-              ${{ secrets.SSH_PRIVATE_KEY }}
+      - name: Initialize repo
+        shell: bash
+        run: |
+          mkdir -p workspace
+          cd workspace
+          echo "workspace-folder=$(pwd)" >> $GITHUB_OUTPUT
+          git config --global user.name "azwhikaru"
+          git config --global user.email "azwhikaru+37921907@github.com"
+          repo init --depth=1 -u ${{ env.MANIFEST_URL }} -b ${{ env.MANIFEST_BRANCH }}
+        id: pwd
 
-    - name: Install repo
-      shell: bash
-      run: |
-        mkdir -p ~/bin
-        curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
-        chmod a+x ~/bin/repo
-        ln -sf ~/bin/repo /usr/bin/repo
+      - name: Repo Sync
+        shell: bash
+        run: |
+          repo sync -j"$(nproc --all)" --force-sync
+        working-directory: workspace
 
-    - name: Initialize repo
-      shell: bash
-      run: |
-        mkdir workspace
-        cd workspace
-        echo "workspace-folder=$(pwd)" >> $GITHUB_OUTPUT
-        git config --global user.name "azwhikaru"
-        git config --global user.email "azwhikaru+37921907@github.com"
-        repo init --depth=1 -u ${{ env.MANIFEST_URL }} -b ${{ env.MANIFEST_BRANCH }}
-      id: pwd
+      - name: Move files to workspace
+        shell: bash
+        run: |
+          mkdir -p workspace/${{ env.DEVICE_PATH }}
+          find . -maxdepth 1 -mindepth 1 \
+            ! -name workspace \
+            ! -name .git \
+            -exec mv -t workspace/${{ env.DEVICE_PATH }} {} +
 
-    - name: Repo Sync
-      shell: bash
-      run: |
-        repo sync -j$(nproc --all) --force-sync
-      working-directory: workspace
+      - name: Building recovery
+        shell: bash
+        run: |
+          source build/envsetup.sh
+          export ALLOW_MISSING_DEPENDENCIES=true
+          lunch ${{ env.MAKEFILE_NAME }}-eng
+          make ${{ env.BUILD_TARGET }}image -j2
+        working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
-    - name: Move files to workspace
-      shell: bash
-      run: |
-        mkdir -p workspace/${{ env.DEVICE_PATH }}
-        ls | grep -v workspace | xargs -I{} mv {} workspace/${{ env.DEVICE_PATH }}
+      - name: Upload to Release
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          python3 - <<'PY'
+          import glob
+          import json
+          import os
+          import pathlib
+          import urllib.error
+          import urllib.parse
+          import urllib.request
 
-    - name: Building recovery
-      shell: bash
-      run: |
-        source build/envsetup.sh
-        export ALLOW_MISSING_DEPENDENCIES=true
-        lunch ${{ env.MAKEFILE_NAME }}-eng
-        make ${{ env.BUILD_TARGET }}image -j2
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+          repo = os.environ["GITHUB_REPOSITORY"]
+          token = os.environ["GITHUB_TOKEN"]
+          run_id = os.environ["GITHUB_RUN_ID"]
+          device = os.environ["DEVICE_NAME"]
+          target = os.environ["BUILD_TARGET"]
+          body = f"Manifest: {os.environ['MANIFEST_BRANCH']}\nDevice: {device}\nTarget: {target}.img\n"
 
-    - name: Upload to Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: | 
-          workspace/out/target/product/${{ env.DEVICE_NAME }}/${{ env.BUILD_TARGET }}.img
-          workspace/out/target/product/${{ env.DEVICE_NAME }}/*.zip
-          workspace/out/target/product/${{ env.DEVICE_NAME }}/*vendor*.img
-        name: ${{ env.DEVICE_NAME }}-${{ github.run_id }}
-        tag_name: ${{ github.run_id }}
-        body: |
-          Manifest: ${{ env.MANIFEST_BRANCH }}
-          Device: ${{ env.DEVICE_NAME }}
-          Target: ${{ env.BUILD_TARGET }}.img
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          patterns = [
+              f"workspace/out/target/product/{device}/{target}.img",
+              f"workspace/out/target/product/{device}/*.zip",
+              f"workspace/out/target/product/{device}/*vendor*.img",
+          ]
+          assets = []
+          for pattern in patterns:
+              assets.extend(sorted(glob.glob(pattern)))
+          assets = [p for p in assets if pathlib.Path(p).is_file()]
+          if not assets:
+              raise SystemExit("No release assets found")
+
+          headers = {
+              "Authorization": f"Bearer {token}",
+              "Accept": "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28",
+              "User-Agent": "python",
+          }
+
+          def request(url, method="GET", data=None, extra_headers=None):
+              hdrs = dict(headers)
+              if extra_headers:
+                  hdrs.update(extra_headers)
+              req = urllib.request.Request(url, data=data, headers=hdrs, method=method)
+              return urllib.request.urlopen(req)
+
+          release_api = f"https://api.github.com/repos/{repo}/releases"
+          payload = json.dumps({
+              "tag_name": run_id,
+              "name": f"{device}-{run_id}",
+              "body": body,
+              "draft": False,
+              "prerelease": False,
+          }).encode("utf-8")
+
+          try:
+              with request(release_api, method="POST", data=payload, extra_headers={"Content-Type": "application/json"}) as resp:
+                  release = json.load(resp)
+          except urllib.error.HTTPError as e:
+              if e.code == 422:
+                  with request(f"{release_api}/tags/{run_id}") as resp:
+                      release = json.load(resp)
+              else:
+                  raise
+
+          upload_url = release["upload_url"].split("{", 1)[0]
+          for asset in assets:
+              name = os.path.basename(asset)
+              url = f"{upload_url}?{urllib.parse.urlencode({'name': name})}"
+              with open(asset, "rb") as f:
+                  data = f.read()
+              with request(url, method="POST", data=data, extra_headers={
+                  "Content-Type": "application/octet-stream",
+                  "Content-Length": str(len(data)),
+              }) as resp:
+                  print(f"uploaded {name}: {resp.status}")
+          print("release complete")
+          PY
