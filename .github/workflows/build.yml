@@ -60,15 +60,6 @@ jobs:
           echo "tzdata tzdata/Areas select Etc" | debconf-set-selections
           echo "tzdata tzdata/Zones/Etc select UTC" | debconf-set-selections
 
-          if ! curl -fsI http://archive.ubuntu.com/ubuntu/dists/trusty/Release >/dev/null; then
-            echo "archive.ubuntu.com does not answer for trusty"
-            exit 1
-          fi
-          if ! curl -fsI http://security.ubuntu.com/ubuntu/dists/trusty-security/Release >/dev/null; then
-            echo "security.ubuntu.com does not answer for trusty-security"
-            exit 1
-          fi
-
           apt-get -o Acquire::Check-Valid-Until=false update
 
           apt-get install -y --no-install-recommends \
@@ -76,11 +67,12 @@ jobs:
             libc6-dev lib32ncurses5-dev x11proto-core-dev libx11-dev tree \
             lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc bc ccache \
             lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev \
-            libsdl1.2-dev libwxgtk3.0-gtk3-dev libxml2 lzop pngcrush \
-            schedtool squashfs-tools imagemagick libbz2-dev lzma ncftp \
-            qemu-user-static libncurses5 python git curl python2.7 \
-            debconf-utils openjdk-7-jdk make m4 bison flex \
-            libssl-dev libtool autoconf automake gawk ca-certificates
+            libsdl1.2-dev libwxgtk3.0-gtk3-dev libwxgtk3.0-dev libwxgtk2.8-dev \
+            libxml2 lzop pngcrush schedtool squashfs-tools imagemagick \
+            libbz2-dev lzma ncftp qemu-user-static libncurses5 \
+            python git curl python2.7 debconf-utils openjdk-7-jdk \
+            make m4 bison flex libssl-dev libtool autoconf automake gawk \
+            ca-certificates
 
           update-alternatives --install /usr/bin/python python /usr/bin/python2.7 1 || true
           update-alternatives --install /usr/bin/python2 python2 /usr/bin/python2.7 1 || true
