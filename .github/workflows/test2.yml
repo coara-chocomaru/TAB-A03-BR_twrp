@@ -200,7 +200,18 @@ jobs:
         sed -i '/include $(BUILD_HOST_STATIC_LIBRARY)/i LOCAL_STATIC_LIBRARIES += libpcre' Android.mk
         echo "=== Patched Android.mk (lines containing libpcre) ==="
         grep -n 'libpcre' Android.mk || true
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}      
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+      
+    - name: Fix checkseapp source code (replace strncat with memcpy)
+      shell: bash
+      run: |
+        cd external/sepolicy/tools
+        sed -i 's/strncat(new_map->key, k->key, key_len);/memcpy(new_map->key + new_map->len, k->key, key_len); new_map->len += key_len; new_map->key[new_map->len] = '\''\0'\'';/' check_seapp.c
+        sed -i 's/strncat(new_map->key, k->value, val_len);/memcpy(new_map->key + new_map->len, k->value, val_len); new_map->len += val_len; new_map->key[new_map->len] = '\''\0'\'';/' check_seapp.c
+        echo "=== check_seapp.c after patch (lines around memcpy) ==="
+        grep -B2 -A2 'memcpy' check_seapp.c | head -20 || true
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+      
     - name: Building recovery
       shell: bash
       run: |
