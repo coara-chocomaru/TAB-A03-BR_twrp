@@ -1,9 +1,10 @@
-name: Recovery Build (Legacy)
+name: Recovery Build (Ubuntu 14.04 / shell only)
 
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 env:
   MANIFEST_URL: 'https://github.com/minimal-manifest-twrp/platform_manifest_twrp_omni'
@@ -13,173 +14,72 @@ env:
   DEVICE_PATH: 'device/sts/a03br'
   DEVICE_NAME: 'a03br'
   MAKEFILE_NAME: 'omni_a03br'
-  BUILD_TARGET: 'recovery'
+  BUILD_TARGET: 'recoveryimage'
 
 jobs:
   build:
     if: github.event.repository.owner.id == github.event.sender.id
     runs-on: ubuntu-latest
     container:
-      image: ubuntu:18.04
+      image: ubuntu:14.04
     permissions:
-      contents: write
+      contents: read
+
+    defaults:
+      run:
+        shell: bash
 
     steps:
-      - name: Display Run Parameters
-        shell: bash
+      - name: Fix old Ubuntu mirrors
         run: |
-          echo "::group::User Environment Variables"
-          echo "Manifest URL: ${{ env.MANIFEST_URL }}"
-          echo "Manifest Branch: ${{ env.MANIFEST_BRANCH }}"
-          echo "Device Tree URL: ${{ env.DEVICE_TREE_URL }}"
-          echo "Device Tree Branch: ${{ env.DEVICE_TREE_BRANCH }}"
-          echo "Device Path: ${{ env.DEVICE_PATH }}"
-          echo "Device Name: ${{ env.DEVICE_NAME }}"
-          echo "Makefile Name: ${{ env.MAKEFILE_NAME }}"
-          echo "Build Target: ${{ env.BUILD_TARGET }}.img"
-          echo "::endgroup::"
+          sed -i 's|http://archive.ubuntu.com/ubuntu|http://old-releases.ubuntu.com/ubuntu|g' /etc/apt/sources.list || true
+          sed -i 's|http://security.ubuntu.com/ubuntu|http://old-releases.ubuntu.com/ubuntu|g' /etc/apt/sources.list || true
+          apt-get update
 
-      - name: Prepare the environment
+      - name: Install build dependencies
         env:
           DEBIAN_FRONTEND: noninteractive
           TZ: UTC
-        shell: bash
         run: |
-          apt update
-          echo "tzdata tzdata/Areas select Etc" | debconf-set-selections
-          echo "tzdata tzdata/Zones/Etc select UTC" | debconf-set-selections
-          apt -y install           python2.7  gperf gcc-multilib g++-multilib             libc6-dev lib32ncurses5-dev x11proto-core-dev libx11-dev tree             lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc bc ccache             lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev             libsdl1.2-dev libwxgtk3.0-gtk3-dev libxml2 lzop pngcrush             schedtool squashfs-tools imagemagick libbz2-dev lzma ncftp             qemu-user-static libncurses5 python3 git curl             debconf-utils openjdk-8-jdk make m4 bison flex             libssl-dev libtool autoconf automake gawk
-          update-alternatives --install /usr/bin/python python /usr/bin/python2.7 1 || true
-          echo "JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64" >> $GITHUB_ENV
+          apt-get install -y          python2.7   build-essential git-core gnupg flex bison gperf zip curl zlib1g-dev             gcc-multilib g++-multilib libc6-dev-i386 lib32ncurses5-dev             x11proto-core-dev libx11-dev lib32z-dev libgl1-mesa-dev             libxml2-utils xsltproc unzip bc ccache liblz4-tool libncurses5-dev             libsdl1.2-dev libwxgtk2.8-dev libxml2 lzop pngcrush schedtool             squashfs-tools imagemagick libbz2-dev lzma ncftp python             openjdk-7-jdk libssl-dev libtool autoconf automake gawk
+          ln -sf /usr/bin/python2.7 /usr/bin/python || true
+          ln -sf /usr/bin/python2.7 /usr/bin/python2 || true
+          echo "JAVA_HOME=/usr/lib/jvm/java-7-openjdk-amd64" >> "$GITHUB_ENV"
+          echo "/usr/lib/jvm/java-7-openjdk-amd64/bin" >> "$GITHUB_PATH"
 
-      - name: Clone repository
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          set -e
-          git clone --depth=1 "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" .
-
-      - name: Install repo
-        shell: bash
+      - name: Install repo tool
         run: |
           mkdir -p ~/bin
           curl -L https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
           chmod a+x ~/bin/repo
           ln -sf ~/bin/repo /usr/bin/repo
 
-      - name: Initialize repo
-        shell: bash
+      - name: Initialize source tree
         run: |
           mkdir -p workspace
           cd workspace
-          echo "workspace-folder=$(pwd)" >> $GITHUB_OUTPUT
-          git config --global user.name "azwhikaru"
-          git config --global user.email "azwhikaru+37921907@github.com"
-          repo init --depth=1 -u ${{ env.MANIFEST_URL }} -b ${{ env.MANIFEST_BRANCH }}
-        id: pwd
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+          repo init --depth=1 -u "${MANIFEST_URL}" -b "${MANIFEST_BRANCH}"
 
-      - name: Repo Sync
-        shell: bash
+      - name: Sync repo
         run: |
           repo sync -j"$(nproc --all)" --force-sync
         working-directory: workspace
 
-      - name: Move files to workspace
-        shell: bash
+      - name: Clone device tree
         run: |
-          mkdir -p workspace/${{ env.DEVICE_PATH }}
-          find . -maxdepth 1 -mindepth 1 \
-            ! -name workspace \
-            ! -name .git \
-            -exec mv -t workspace/${{ env.DEVICE_PATH }} {} +
+          mkdir -p "workspace/$(dirname "${DEVICE_PATH}")"
+          git clone --depth=1 --branch "${{ github.ref_name }}"             "https://github.com/${{ github.repository }}.git"             "workspace/${DEVICE_PATH}"
 
-      - name: Building recovery
-        shell: bash
+      - name: Build recovery
         run: |
           source build/envsetup.sh
-          export ALLOW_MISSING_DEPENDENCIES=true
-          lunch ${{ env.MAKEFILE_NAME }}-eng
-          make ${{ env.BUILD_TARGET }}image -j2
-        working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+          lunch "${MAKEFILE_NAME}-eng"
+          make "${BUILD_TARGET}" -j2
+        working-directory: workspace
 
-      - name: Upload to Release
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+      - name: Show build outputs
         run: |
-          set -e
-          python3 - <<'PY'
-          import glob
-          import json
-          import os
-          import pathlib
-          import urllib.error
-          import urllib.parse
-          import urllib.request
-
-          repo = os.environ["GITHUB_REPOSITORY"]
-          token = os.environ["GITHUB_TOKEN"]
-          run_id = os.environ["GITHUB_RUN_ID"]
-          device = os.environ["DEVICE_NAME"]
-          target = os.environ["BUILD_TARGET"]
-          body = f"Manifest: {os.environ['MANIFEST_BRANCH']}\nDevice: {device}\nTarget: {target}.img\n"
-
-          patterns = [
-              f"workspace/out/target/product/{device}/{target}.img",
-              f"workspace/out/target/product/{device}/*.zip",
-              f"workspace/out/target/product/{device}/*vendor*.img",
-          ]
-          assets = []
-          for pattern in patterns:
-              assets.extend(sorted(glob.glob(pattern)))
-          assets = [p for p in assets if pathlib.Path(p).is_file()]
-          if not assets:
-              raise SystemExit("No release assets found")
-
-          headers = {
-              "Authorization": f"Bearer {token}",
-              "Accept": "application/vnd.github+json",
-              "X-GitHub-Api-Version": "2022-11-28",
-              "User-Agent": "python",
-          }
-
-          def request(url, method="GET", data=None, extra_headers=None):
-              hdrs = dict(headers)
-              if extra_headers:
-                  hdrs.update(extra_headers)
-              req = urllib.request.Request(url, data=data, headers=hdrs, method=method)
-              return urllib.request.urlopen(req)
-
-          release_api = f"https://api.github.com/repos/{repo}/releases"
-          payload = json.dumps({
-              "tag_name": run_id,
-              "name": f"{device}-{run_id}",
-              "body": body,
-              "draft": False,
-              "prerelease": False,
-          }).encode("utf-8")
-
-          try:
-              with request(release_api, method="POST", data=payload, extra_headers={"Content-Type": "application/json"}) as resp:
-                  release = json.load(resp)
-          except urllib.error.HTTPError as e:
-              if e.code == 422:
-                  with request(f"{release_api}/tags/{run_id}") as resp:
-                      release = json.load(resp)
-              else:
-                  raise
-
-          upload_url = release["upload_url"].split("{", 1)[0]
-          for asset in assets:
-              name = os.path.basename(asset)
-              url = f"{upload_url}?{urllib.parse.urlencode({'name': name})}"
-              with open(asset, "rb") as f:
-                  data = f.read()
-              with request(url, method="POST", data=data, extra_headers={
-                  "Content-Type": "application/octet-stream",
-                  "Content-Length": str(len(data)),
-              }) as resp:
-                  print(f"uploaded {name}: {resp.status}")
-          print("release complete")
-          PY
+          ls -lah "out/target/product/${DEVICE_NAME}/" || true
+        working-directory: workspace
