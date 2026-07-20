@@ -50,7 +50,6 @@ jobs:
           cat >/etc/apt/sources.list <<'EOF'
           deb http://old-releases.ubuntu.com/ubuntu trusty main restricted universe multiverse
           deb http://old-releases.ubuntu.com/ubuntu trusty-updates main restricted universe multiverse
-          deb http://old-releases.ubuntu.com/ubuntu trusty-security main restricted universe multiverse
           deb http://old-releases.ubuntu.com/ubuntu trusty-backports main restricted universe multiverse
           EOF
 
