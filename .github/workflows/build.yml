@@ -48,7 +48,7 @@ jobs:
           apt update
           echo "tzdata tzdata/Areas select Etc" | debconf-set-selections
           echo "tzdata tzdata/Zones/Etc select UTC" | debconf-set-selections
-          apt -y install             gperf gcc-multilib g++-multilib             libc6-dev lib32ncurses5-dev x11proto-core-dev libx11-dev tree             lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc bc ccache             lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev             libsdl1.2-dev libwxgtk3.0-gtk3-dev libxml2 lzop pngcrush             schedtool squashfs-tools imagemagick libbz2-dev lzma ncftp             qemu-user-static libncurses5 python3 git curl             python2 debconf-utils openjdk-8-jdk make m4 bison flex             libssl-dev libtool autoconf automake gawk
+          apt -y install             gperf gcc-multilib g++-multilib             libc6-dev lib32ncurses5-dev x11proto-core-dev libx11-dev tree             lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc bc ccache             lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev             libsdl1.2-dev libwxgtk3.0-gtk3-dev libxml2 lzop pngcrush             schedtool squashfs-tools imagemagick libbz2-dev lzma ncftp             qemu-user-static libncurses5 python3 git curl             debconf-utils openjdk-8-jdk make m4 bison flex             libssl-dev libtool autoconf automake gawk
           update-alternatives --install /usr/bin/python python /usr/bin/python2.7 1 || true
           echo "JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64" >> $GITHUB_ENV
 
