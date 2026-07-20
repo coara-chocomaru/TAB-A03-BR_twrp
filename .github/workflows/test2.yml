@@ -23,6 +23,7 @@ jobs:
       contents: write
     steps:
     - name: Display Run Parameters
+      shell: bash
       run: |
         echo "::group::User Environment Variables"
         echo "Manifest URL: ${{ env.MANIFEST_URL }}"
@@ -45,6 +46,7 @@ jobs:
       env:
         DEBIAN_FRONTEND: noninteractive
         TZ: UTC
+      shell: bash
       run: |
         apt update
         apt -y upgrade
@@ -59,6 +61,7 @@ jobs:
         update-alternatives --install /usr/bin/python python /usr/bin/python2 1 || true
 
     - name: Install OpenJDK
+      shell: bash
       run: |
         apt -y install openjdk-8-jdk
         echo "JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64" >> $GITHUB_ENV
@@ -71,6 +74,7 @@ jobs:
               ${{ secrets.SSH_PRIVATE_KEY }}
 
     - name: Install repo
+      shell: bash
       run: |
         mkdir -p ~/bin
         curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
@@ -78,6 +82,7 @@ jobs:
         ln -sf ~/bin/repo /usr/bin/repo
 
     - name: Initialize repo
+      shell: bash
       run: |
         mkdir workspace
         cd workspace
@@ -88,16 +93,19 @@ jobs:
       id: pwd
 
     - name: Repo Sync
+      shell: bash
       run: |
         repo sync -j$(nproc --all) --force-sync
       working-directory: workspace
 
     - name: Move files to workspace
+      shell: bash
       run: |
         mkdir -p workspace/${{ env.DEVICE_PATH }}
         ls | grep -v workspace | xargs -I{} mv {} workspace/${{ env.DEVICE_PATH }}
 
     - name: Patch BoardConfig with the correct exclusion flags
+      shell: bash
       run: |
         cd ${{ env.DEVICE_PATH }}
         if grep -q '^BOARD_HAS_NO_REAL_SDCARD' BoardConfig.mk; then
@@ -113,12 +121,14 @@ jobs:
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
     - name: Patch Android.mk to drop unconditional FAT tools (fsck.fat/fatlabel/mkfs.fat)
+      shell: bash
       run: |
         cd bootable/recovery
         sed -i '/^\s*fsck\.fat \\$/d; /^\s*fatlabel \\$/d; /^\s*mkfs\.fat \\$/d' Android.mk
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
     - name: Statically link libcrypto to eliminate standalone libcrypto.so
+      shell: bash
       run: |
         python3 - <<'PYEOF'
         import re, glob
@@ -151,28 +161,33 @@ jobs:
       if: |
         env.COMMON_TREE_URL != null
         && env.COMMON_PATH != null
+      shell: bash
       run: |
         git clone ${{ env.COMMON_TREE_URL }} -b ${{ env.DEVICE_TREE_BRANCH }} ./${{ env.COMMON_PATH }}
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
     - name: Remove unused language files
+      shell: bash
       run: |
              cd workspace
              find bootable/recovery/gui/theme/common/languages/ \
              -name "*.xml" ! -name "ja.xml" ! -name "en.xml" -delete
 
     - name: Fix GCC10+ fno-common host build failure (optional for 20.04)
+      shell: bash
       run: |
         echo 'HOST_GLOBAL_CFLAGS += -fcommon' >> build/core/combo/HOST_linux-x86.mk
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
     - name: Patch checkpolicy.h to fix GCC10+ multiple definition error
+      shell: bash
       run: |
         sed -i 's/^te_assert_t \*te_assertions;/extern te_assert_t *te_assertions;/' external/checkpolicy/checkpolicy.h
         echo 'te_assert_t *te_assertions;' >> external/checkpolicy/checkpolicy.c
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-      
+
     - name: Building recovery
+      shell: bash 
       run: |
         source build/envsetup.sh
         export ALLOW_MISSING_DEPENDENCIES=true
