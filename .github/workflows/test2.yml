@@ -57,7 +57,7 @@ jobs:
           xsltproc bc ccache lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev libsdl1.2-dev \
           libwxgtk3.0-gtk3-dev libxml2 lzop pngcrush schedtool squashfs-tools imagemagick \
           libbz2-dev lzma ncftp qemu-user-static libstdc++-10-dev libncurses5 python3 \
-          git curl python2 debconf-utils
+          git curl python2 debconf-utils make
         update-alternatives --install /usr/bin/python python /usr/bin/python2 1 || true
 
     - name: Install OpenJDK
