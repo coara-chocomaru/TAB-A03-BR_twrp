@@ -154,6 +154,17 @@ jobs:
         mkdir -p $CCACHE_DIR
         ccache -M 50G || true
 
+    - name: Fix libselinux host static library (remove WHOLE)
+      shell: bash
+      run: |
+        cd external/libselinux
+        sed -i '/include $(BUILD_HOST_STATIC_LIBRARY)/{s/^LOCAL_WHOLE_STATIC_LIBRARIES := libpcre/LOCAL_STATIC_LIBRARIES += libpcre/}' Android.mk
+        if grep -q 'LOCAL_WHOLE_STATIC_LIBRARIES' Android.mk; then
+          echo "WARNING: LOCAL_WHOLE_STATIC_LIBRARIES still exists!"
+          grep -n 'LOCAL_WHOLE_STATIC_LIBRARIES' Android.mk
+        fi
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
     - name: Fix build/core/definitions.mk to prevent double path in WHOLE linking
       shell: bash
       run: |
