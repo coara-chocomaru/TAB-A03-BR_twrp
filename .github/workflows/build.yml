@@ -1,10 +1,9 @@
-name: Recovery Build (Ubuntu 14.04 / shell only)
+name: Recovery Build (Legacy)
 
 on:
   push:
     branches:
       - main
-  workflow_dispatch:
 
 env:
   MANIFEST_URL: 'https://github.com/minimal-manifest-twrp/platform_manifest_twrp_omni'
@@ -14,7 +13,7 @@ env:
   DEVICE_PATH: 'device/sts/a03br'
   DEVICE_NAME: 'a03br'
   MAKEFILE_NAME: 'omni_a03br'
-  BUILD_TARGET: 'recoveryimage'
+  BUILD_TARGET: 'recovery'
 
 jobs:
   build:
@@ -23,63 +22,210 @@ jobs:
     container:
       image: ubuntu:14.04
     permissions:
-      contents: read
-
-    defaults:
-      run:
-        shell: bash
+      contents: write
 
     steps:
-      - name: Fix old Ubuntu mirrors
+      - name: Display Run Parameters
+        shell: bash
         run: |
-          sed -i 's|http://archive.ubuntu.com/ubuntu|http://old-releases.ubuntu.com/ubuntu|g' /etc/apt/sources.list || true
-          sed -i 's|http://security.ubuntu.com/ubuntu|http://old-releases.ubuntu.com/ubuntu|g' /etc/apt/sources.list || true
-          apt-get update
+          echo "::group::User Environment Variables"
+          echo "Manifest URL: ${{ env.MANIFEST_URL }}"
+          echo "Manifest Branch: ${{ env.MANIFEST_BRANCH }}"
+          echo "Device Tree URL: ${{ env.DEVICE_TREE_URL }}"
+          echo "Device Tree Branch: ${{ env.DEVICE_TREE_BRANCH }}"
+          echo "Device Path: ${{ env.DEVICE_PATH }}"
+          echo "Device Name: ${{ env.DEVICE_NAME }}"
+          echo "Makefile Name: ${{ env.MAKEFILE_NAME }}"
+          echo "Build Target: ${{ env.BUILD_TARGET }}.img"
+          echo "::endgroup::"
 
-      - name: Install build dependencies
+      - name: Prepare the environment
         env:
           DEBIAN_FRONTEND: noninteractive
           TZ: UTC
+        shell: bash
         run: |
-          apt-get install -y          python2.7   build-essential git-core gnupg flex bison gperf zip curl zlib1g-dev             gcc-multilib g++-multilib libc6-dev-i386 lib32ncurses5-dev             x11proto-core-dev libx11-dev lib32z-dev libgl1-mesa-dev             libxml2-utils xsltproc unzip bc ccache liblz4-tool libncurses5-dev             libsdl1.2-dev libwxgtk2.8-dev libxml2 lzop pngcrush schedtool             squashfs-tools imagemagick libbz2-dev lzma ncftp python             openjdk-7-jdk libssl-dev libtool autoconf automake gawk
-          ln -sf /usr/bin/python2.7 /usr/bin/python || true
-          ln -sf /usr/bin/python2.7 /usr/bin/python2 || true
-          echo "JAVA_HOME=/usr/lib/jvm/java-7-openjdk-amd64" >> "$GITHUB_ENV"
-          echo "/usr/lib/jvm/java-7-openjdk-amd64/bin" >> "$GITHUB_PATH"
+          set -euxo pipefail
 
-      - name: Install repo tool
+          cat >/etc/apt/sources.list <<'EOF'
+          deb http://old-releases.ubuntu.com/ubuntu trusty main restricted universe multiverse
+          deb http://old-releases.ubuntu.com/ubuntu trusty-updates main restricted universe multiverse
+          deb http://old-releases.ubuntu.com/ubuntu trusty-security main restricted universe multiverse
+          deb http://old-releases.ubuntu.com/ubuntu trusty-backports main restricted universe multiverse
+          EOF
+
+          rm -f /etc/apt/sources.list.d/*.list || true
+
+          echo "tzdata tzdata/Areas select Etc" | debconf-set-selections
+          echo "tzdata tzdata/Zones/Etc select UTC" | debconf-set-selections
+
+          apt-get -o Acquire::Check-Valid-Until=false update
+
+          install_if_available() {
+            local pkg
+            local to_install=()
+            for pkg in "$@"; do
+              if apt-cache show "$pkg" >/dev/null 2>&1; then
+                to_install+=("$pkg")
+              else
+                echo "Skipping unavailable package: $pkg"
+              fi
+            done
+            if [ "${#to_install[@]}" -gt 0 ]; then
+              apt-get install -y --no-install-recommends "${to_install[@]}"
+            fi
+          }
+
+          install_if_available \
+            gperf gcc-multilib g++-multilib \
+            libc6-dev lib32ncurses5-dev x11proto-core-dev libx11-dev tree \
+            lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc bc ccache \
+            lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev \
+            libsdl1.2-dev libwxgtk3.0-gtk3-dev libwxgtk3.0-dev libwxgtk2.8-dev \
+            libxml2 lzop pngcrush schedtool squashfs-tools imagemagick \
+            libbz2-dev lzma ncftp qemu-user-static libncurses5 \
+            python git curl python2.7 debconf-utils openjdk-7-jdk \
+            make m4 bison flex libssl-dev libtool autoconf automake gawk \
+            ca-certificates
+
+          update-alternatives --install /usr/bin/python python /usr/bin/python2.7 1 || true
+          update-alternatives --install /usr/bin/python2 python2 /usr/bin/python2.7 1 || true
+          echo "JAVA_HOME=/usr/lib/jvm/java-7-openjdk-amd64" >> "$GITHUB_ENV"
+          echo "USE_CCACHE=1" >> "$GITHUB_ENV"
+
+      - name: Clone repository
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
+          git clone --depth=1 "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" .
+
+      - name: Install repo
+        shell: bash
+        run: |
+          set -euxo pipefail
           mkdir -p ~/bin
-          curl -L https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+          curl -fsSL https://storage.googleapis.com/git-repo-downloads/repo -o ~/bin/repo
           chmod a+x ~/bin/repo
           ln -sf ~/bin/repo /usr/bin/repo
 
-      - name: Initialize source tree
+      - name: Initialize repo
+        shell: bash
+        id: pwd
         run: |
+          set -euxo pipefail
           mkdir -p workspace
           cd workspace
-          git config --global user.name "github-actions"
-          git config --global user.email "github-actions@github.com"
-          repo init --depth=1 -u "${MANIFEST_URL}" -b "${MANIFEST_BRANCH}"
+          echo "workspace-folder=$(pwd)" >> "$GITHUB_OUTPUT"
+          git config --global user.name "azwhikaru"
+          git config --global user.email "azwhikaru+37921907@github.com"
+          repo init --depth=1 -u "${{ env.MANIFEST_URL }}" -b "${{ env.MANIFEST_BRANCH }}"
 
-      - name: Sync repo
-        run: |
-          repo sync -j"$(nproc --all)" --force-sync
+      - name: Repo Sync
+        shell: bash
         working-directory: workspace
-
-      - name: Clone device tree
         run: |
-          mkdir -p "workspace/$(dirname "${DEVICE_PATH}")"
-          git clone --depth=1 --branch "${{ github.ref_name }}"             "https://github.com/${{ github.repository }}.git"             "workspace/${DEVICE_PATH}"
+          set -euxo pipefail
+          repo sync -j"$(nproc --all)" --force-sync --no-clone-bundle --no-tags --prune
 
-      - name: Build recovery
+      - name: Move files to workspace
+        shell: bash
         run: |
+          set -euxo pipefail
+          mkdir -p "workspace/${{ env.DEVICE_PATH }}"
+          find . -maxdepth 1 -mindepth 1 \
+            ! -name workspace \
+            ! -name .git \
+            -exec mv -t "workspace/${{ env.DEVICE_PATH }}" -- {} +
+
+      - name: Building recovery
+        shell: bash
+        working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+        run: |
+          set -euxo pipefail
           source build/envsetup.sh
-          lunch "${MAKEFILE_NAME}-eng"
-          make "${BUILD_TARGET}" -j2
-        working-directory: workspace
+          export ALLOW_MISSING_DEPENDENCIES=true
+          lunch "${{ env.MAKEFILE_NAME }}-eng"
+          make "${{ env.BUILD_TARGET }}image" -j2
 
-      - name: Show build outputs
+      - name: Upload to Release
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          ls -lah "out/target/product/${DEVICE_NAME}/" || true
-        working-directory: workspace
+          set -euo pipefail
+          python3 - <<'PY'
+          import glob
+          import json
+          import os
+          import pathlib
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          repo = os.environ["GITHUB_REPOSITORY"]
+          token = os.environ["GITHUB_TOKEN"]
+          run_id = os.environ["GITHUB_RUN_ID"]
+          device = os.environ["DEVICE_NAME"]
+          target = os.environ["BUILD_TARGET"]
+          body = f"Manifest: {os.environ['MANIFEST_BRANCH']}\nDevice: {device}\nTarget: {target}.img\n"
+
+          patterns = [
+              f"workspace/out/target/product/{device}/{target}.img",
+              f"workspace/out/target/product/{device}/*.zip",
+              f"workspace/out/target/product/{device}/*vendor*.img",
+          ]
+          assets = []
+          for pattern in patterns:
+              assets.extend(sorted(glob.glob(pattern)))
+          assets = [p for p in assets if pathlib.Path(p).is_file()]
+          if not assets:
+              raise SystemExit("No release assets found")
+
+          headers = {
+              "Authorization": f"Bearer {token}",
+              "Accept": "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28",
+              "User-Agent": "python",
+          }
+
+          def request(url, method="GET", data=None, extra_headers=None):
+              hdrs = dict(headers)
+              if extra_headers:
+                  hdrs.update(extra_headers)
+              req = urllib.request.Request(url, data=data, headers=hdrs, method=method)
+              return urllib.request.urlopen(req)
+
+          release_api = f"https://api.github.com/repos/{repo}/releases"
+          payload = json.dumps({
+              "tag_name": run_id,
+              "name": f"{device}-{run_id}",
+              "body": body,
+              "draft": False,
+              "prerelease": False,
+          }).encode("utf-8")
+
+          try:
+              with request(release_api, method="POST", data=payload, extra_headers={"Content-Type": "application/json"}) as resp:
+                  release = json.load(resp)
+          except urllib.error.HTTPError as e:
+              if e.code == 422:
+                  with request(f"{release_api}/tags/{run_id}") as resp:
+                      release = json.load(resp)
+              else:
+                  raise
+
+          upload_url = release["upload_url"].split("{", 1)[0]
+          for asset in assets:
+              name = os.path.basename(asset)
+              url = f"{upload_url}?{urllib.parse.urlencode({'name': name})}"
+              with open(asset, "rb") as f:
+                  data = f.read()
+              with request(url, method="POST", data=data, extra_headers={
+                  "Content-Type": "application/octet-stream",
+                  "Content-Length": str(len(data)),
+              }) as resp:
+                  print(f"uploaded {name}: {resp.status}")
+          print("release complete")
+          PY
