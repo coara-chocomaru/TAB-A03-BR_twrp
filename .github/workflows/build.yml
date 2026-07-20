@@ -39,7 +39,6 @@ jobs:
           echo "Build Target: ${{ env.BUILD_TARGET }}.img"
           echo "::endgroup::"
 
-
       - name: Prepare the environment
         env:
           DEBIAN_FRONTEND: noninteractive
@@ -96,7 +95,7 @@ jobs:
         run: |
           set -euxo pipefail
           mkdir -p ~/bin
-          curl -fsSL https://storage.googleapis.com/git-repo-downloads/repo -o ~/bin/repo
+          curl -fsSL https://storage.googleapis.com/git-repo-downloads/repo-1 -o ~/bin/repo
           chmod a+x ~/bin/repo
           ln -sf ~/bin/repo /usr/bin/repo
 
@@ -110,7 +109,7 @@ jobs:
           echo "workspace-folder=$(pwd)" >> "$GITHUB_OUTPUT"
           git config --global user.name "azwhikaru"
           git config --global user.email "azwhikaru+37921907@github.com"
-          repo init --depth=1 -u "${{ env.MANIFEST_URL }}" -b "${{ env.MANIFEST_BRANCH }}"
+          repo init --depth=1 --repo-branch=repo-1 -u "${{ env.MANIFEST_URL }}" -b "${{ env.MANIFEST_BRANCH }}"
 
       - name: Repo Sync
         shell: bash
