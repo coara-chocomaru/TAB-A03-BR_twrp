@@ -141,6 +141,15 @@ jobs:
           set -euxo pipefail
           sed -i 's/nullptr/NULL/g' bootable/recovery/partition.cpp
 
+      - name: Patch recovery ramdisk symbol stripping
+        shell: bash
+        working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+        run: |
+          set -euxo pipefail
+          printf '\t$(hide) find $(TARGET_RECOVERY_ROOT_OUT) -type f \\( -path "*/sbin/*" -o -name "*.so" \\) -exec $(TARGET_STRIP) --strip-unneeded {} \\; >/dev/null 2>&1 ; true\n' > /tmp/strip_recovery_ramdisk.mk
+          sed -i '\#ro.adb.secure=1/ro.adb.secure=0#r /tmp/strip_recovery_ramdisk.mk' build/core/Makefile
+          grep -n -A1 "ro.adb.secure=1/ro.adb.secure=0" build/core/Makefile
+
       - name: Building recovery
         shell: bash
         working-directory: ${{ steps.pwd.outputs.workspace-folder }}
@@ -151,25 +160,6 @@ jobs:
           lunch "${{ env.MAKEFILE_NAME }}-eng"
           set -u
           export ALLOW_MISSING_DEPENDENCIES=true
-          OUT_DIR="${PWD}/out/target/product/${{ env.DEVICE_NAME }}"
-          RECOVERY_ROOT_TS="${OUT_DIR}/recovery/root.ts"
-          RECOVERY_ROOT="${OUT_DIR}/recovery/root"
-
-          make "${RECOVERY_ROOT_TS}" -j2
-
-          STRIP_BIN="$(get_build_var TARGET_STRIP 2>/dev/null || true)"
-          if [ -z "${STRIP_BIN}" ] || [ ! -x "${STRIP_BIN}" ]; then
-            STRIP_BIN="$(find prebuilts -type f -name '*-strip' 2>/dev/null | head -n1)"
-          fi
-          if [ -n "${STRIP_BIN}" ] && [ -x "${STRIP_BIN}" ] && [ -d "${RECOVERY_ROOT}" ]; then
-            while IFS= read -r -d '' f; do
-              "${STRIP_BIN}" --strip-unneeded "${f}" 2>/dev/null || true
-            done < <(find "${RECOVERY_ROOT}" -type f \( -path "*/sbin/*" -o -name "*.so" \) -print0)
-            touch "${RECOVERY_ROOT_TS}"
-          else
-            echo "TARGET_STRIP not found, skipping ramdisk symbol stripping"
-          fi
-
           make "${{ env.BUILD_TARGET }}image" -j2
 
       - name: Reduce build output disk usage
