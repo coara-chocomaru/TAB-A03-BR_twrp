@@ -218,8 +218,17 @@ jobs:
         else
           sed -i '/LOCAL_MODULE := checkfc/ a LOCAL_STATIC_LIBRARIES := libpcre' Android.mk
         fi
-        echo "=== checkfc block after patch ==="
-        grep -A10 'LOCAL_MODULE := checkfc' Android.mk
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
+    - name: Fix init to link libpcre explicitly
+      shell: bash
+      run: |
+        cd system/core/init
+        if grep -q '^LOCAL_STATIC_LIBRARIES' Android.mk; then
+          sed -i '/^LOCAL_STATIC_LIBRARIES/ s/$/ libpcre/' Android.mk
+        else
+          sed -i '/LOCAL_MODULE := init/ a LOCAL_STATIC_LIBRARIES := libpcre' Android.mk
+        fi
       working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
     - name: Building recovery
