@@ -17,7 +17,6 @@ LOCAL_CFLAGS += \
     -fdata-sections \
     -fno-stack-protector \
     -fomit-frame-pointer \
-    --dynamic-linker=/sbin/linker64 \
     -g0
 
 LOCAL_LDFLAGS += \
