@@ -1,2 +1,11 @@
 on early-init
     setenforce 0
+
+on init
+    start touchyfix
+
+service touchyfix /sbin/touchyfix /dev/input/event1 -13
+    class core
+    user root
+    group root
+    disabled
