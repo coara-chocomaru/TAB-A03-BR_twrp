@@ -11,17 +11,19 @@ LOCAL_MODULE_PATH := $(TARGET_RECOVERY_ROOT_OUT)/sbin
 LOCAL_FORCE_STATIC_EXECUTABLE := true
 
 LOCAL_CFLAGS += \
+    -std=gnu89 \
     -Os \
-    -g0 \
     -ffunction-sections \
     -fdata-sections \
     -fno-stack-protector \
-    -fomit-frame-pointer
+    -fomit-frame-pointer \
+    --dynamic-linker=/sbin/linker64 \
+    -g0
 
 LOCAL_LDFLAGS += \
     -Wl,--gc-sections \
-    -Wl,-s \
-    --dynamic-linker=/sbin/linker64
+    -Wl,-s
+
 LOCAL_STRIP_MODULE := true
 LOCAL_STATIC_LIBRARIES += libc
 
