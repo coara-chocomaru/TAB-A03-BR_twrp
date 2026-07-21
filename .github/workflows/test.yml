@@ -3,7 +3,7 @@ name: Recovery Build (Legacy)
 on:
   push:
     branches:
-      - maind
+      - main
 
 env:
   MANIFEST_URL: 'https://github.com/minimal-manifest-twrp/platform_manifest_twrp_omni'
@@ -20,329 +20,247 @@ jobs:
     if: github.event.repository.owner.id == github.event.sender.id
     runs-on: ubuntu-latest
     container:
-      image: ubuntu:20.04
+      image: ubuntu:14.04
     permissions:
       contents: write
 
     steps:
-    - name: Display Run Parameters
-      shell: bash
-      run: |
-        echo "::group::User Environment Variables"
-        echo "Manifest URL: ${{ env.MANIFEST_URL }}"
-        echo "Manifest Branch: ${{ env.MANIFEST_BRANCH }}"
-        echo "Device Tree URL: ${{ env.DEVICE_TREE_URL }}"
-        echo "Device Tree Branch: ${{ env.DEVICE_TREE_BRANCH }}"
-        echo "Device Path: ${{ env.DEVICE_PATH }}"
-        echo "Device Name: ${{ env.DEVICE_NAME }}"
-        echo "Makefile Name: ${{ env.MAKEFILE_NAME }}"
-        echo "Build Target: ${{ env.BUILD_TARGET }}.img"
-        echo "::endgroup::"
+      - name: Display Run Parameters
+        shell: bash
+        run: |
+          echo "::group::User Environment Variables"
+          echo "Manifest URL: ${{ env.MANIFEST_URL }}"
+          echo "Manifest Branch: ${{ env.MANIFEST_BRANCH }}"
+          echo "Device Tree URL: ${{ env.DEVICE_TREE_URL }}"
+          echo "Device Tree Branch: ${{ env.DEVICE_TREE_BRANCH }}"
+          echo "Device Path: ${{ env.DEVICE_PATH }}"
+          echo "Device Name: ${{ env.DEVICE_NAME }}"
+          echo "Makefile Name: ${{ env.MAKEFILE_NAME }}"
+          echo "Build Target: ${{ env.BUILD_TARGET }}.img"
+          echo "::endgroup::"
 
-    - name: Check Out
-      uses: actions/checkout@v3
+      - name: Prepare the environment
+        env:
+          DEBIAN_FRONTEND: noninteractive
+          TZ: UTC
+        shell: bash
+        run: |
+          set -euxo pipefail
 
-    - name: Cleanup
-      uses: rokibhasansagar/slimhub_actions@main
+          rm -f /etc/apt/sources.list.d/*.list || true
+          rm -f /etc/apt/sources.list.d/ubuntu-esm-infra-trusty.list || true
 
-    - name: Prepare the environment
-      env:
-        DEBIAN_FRONTEND: noninteractive
-        TZ: UTC
-      shell: bash
-      run: |
-        apt update
-        apt -y upgrade
-        echo "tzdata tzdata/Areas select Etc" | debconf-set-selections
-        echo "tzdata tzdata/Zones/Etc select UTC" | debconf-set-selections
-        apt -y install \
-          gperf gcc-multilib gcc-10-multilib g++-multilib g++-10-multilib \
-          libc6-dev lib32ncurses5-dev x11proto-core-dev libx11-dev tree \
-          lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc bc ccache \
-          lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev \
-          libsdl1.2-dev libwxgtk3.0-gtk3-dev libxml2 lzop pngcrush \
-          schedtool squashfs-tools imagemagick libbz2-dev lzma ncftp \
-          qemu-user-static libstdc++-10-dev libncurses5 python3 git curl \
-          python2 debconf-utils openjdk-8-jdk make m4 bison flex \
-          libssl-dev libtool autoconf automake gawk
-        update-alternatives --install /usr/bin/python python /usr/bin/python2 1 || true
-        echo "JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64" >> $GITHUB_ENV
+          cat >/etc/apt/sources.list <<'EOF'
+          deb http://archive.ubuntu.com/ubuntu trusty main restricted universe multiverse
+          deb http://archive.ubuntu.com/ubuntu trusty-updates main restricted universe multiverse
+          deb http://archive.ubuntu.com/ubuntu trusty-backports main restricted universe multiverse
+          deb http://security.ubuntu.com/ubuntu trusty-security main restricted universe multiverse
+          EOF
 
-    - name: Setup SSH Keys
-      if: ${{ startsWith(env.MANIFEST_URL, 'git@github.com') }}
-      uses: webfactory/ssh-agent@v0.5.4
-      with:
-          ssh-private-key: |
-              ${{ secrets.SSH_PRIVATE_KEY }}
+          echo "tzdata tzdata/Areas select Etc" | debconf-set-selections
+          echo "tzdata tzdata/Zones/Etc select UTC" | debconf-set-selections
 
-    - name: Install repo
-      shell: bash
-      run: |
-        mkdir -p ~/bin
-        curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
-        chmod a+x ~/bin/repo
-        ln -sf ~/bin/repo /usr/bin/repo
+          apt-get -o Acquire::Check-Valid-Until=false update
 
-    - name: Initialize repo
-      shell: bash
-      run: |
-        mkdir workspace
-        cd workspace
-        echo "workspace-folder=$(pwd)" >> $GITHUB_OUTPUT
-        git config --global user.name "azwhikaru"
-        git config --global user.email "azwhikaru+37921907@github.com"
-        repo init --depth=1 -u ${{ env.MANIFEST_URL }} -b ${{ env.MANIFEST_BRANCH }}
-      id: pwd
+          apt-get install -y --no-install-recommends \
+            gperf gcc-multilib g++-multilib \
+            libc6-dev lib32ncurses5-dev x11proto-core-dev libx11-dev tree \
+            lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc bc ccache \
+            lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev \
+            libsdl1.2-dev \
+            libwxbase3.0-0 libwxbase3.0-dev \
+            libwxgtk3.0-0 libwxgtk3.0-dev \
+            wx3.0-headers wx-common zip \
+            libxml2 lzop pngcrush schedtool squashfs-tools imagemagick \
+            libbz2-dev lzma ncftp qemu-user-static libncurses5 \
+            python git curl python2.7 debconf-utils openjdk-7-jdk \
+            libbcprov-java \
+            make m4 bison flex libssl-dev libtool autoconf automake gawk \
+            ca-certificates
 
-    - name: Repo Sync
-      shell: bash
-      run: |
-        repo sync -j$(nproc --all) --force-sync
-      working-directory: workspace
+          update-alternatives --install /usr/bin/python python /usr/bin/python2.7 1 || true
+          update-alternatives --install /usr/bin/python2 python2 /usr/bin/python2.7 1 || true
+          echo "JAVA_HOME=/usr/lib/jvm/java-7-openjdk-amd64" >> "$GITHUB_ENV"
+          echo "USE_CCACHE=1" >> "$GITHUB_ENV"
+          echo "JAVA_TOOL_OPTIONS=-Xbootclasspath/a:/usr/share/java/bcprov.jar" >> "$GITHUB_ENV"
 
-    - name: Move files to workspace
-      shell: bash
-      run: |
-        mkdir -p workspace/${{ env.DEVICE_PATH }}
-        ls | grep -v workspace | xargs -I{} mv {} workspace/${{ env.DEVICE_PATH }}
+      - name: Clone repository
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git clone --depth=1 "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" .
 
-    - name: Patch Android.mk to drop unconditional FAT tools
-      shell: bash
-      run: |
-        cd bootable/recovery
-        sed -i '/^\s*fsck\.fat \\$/d; /^\s*fatlabel \\$/d; /^\s*mkfs\.fat \\$/d' Android.mk
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+      - name: Install repo
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p ~/bin
+          curl -fsSL https://storage.googleapis.com/git-repo-downloads/repo-1 -o ~/bin/repo
+          chmod a+x ~/bin/repo
+          ln -sf ~/bin/repo /usr/bin/repo
 
-    - name: Statically link libcrypto to eliminate standalone libcrypto.so
-      shell: bash
-      run: |
-        python3 - <<'PYEOF'
-        import re, glob
-        word = re.compile(r'(?<![\w.])libcrypto(?![\w.])')
-        patched = []
-        for path in glob.glob('bootable/recovery/**/Android.mk', recursive=True):
-            with open(path, 'r', encoding='utf-8', errors='ignore') as f:
-                content = f.read()
-            lines = content.split('\n')
-            changed = False
-            out_lines = []
-            for line in lines:
-                if 'LOCAL_SHARED_LIBRARIES' in line and word.search(line):
-                    new_line = word.sub('', line)
-                    new_line = re.sub(r'[ \t]+', ' ', new_line).rstrip()
-                    out_lines.append(new_line)
-                    out_lines.append('LOCAL_STATIC_LIBRARIES += libcrypto_static')
-                    changed = True
-                else:
-                    out_lines.append(line)
-            if changed:
-                with open(path, 'w', encoding='utf-8') as f:
-                    f.write('\n'.join(out_lines))
-                patched.append(path)
-        print(patched)
-        PYEOF
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+      - name: Initialize repo
+        shell: bash
+        id: pwd
+        run: |
+          set -euxo pipefail
+          mkdir -p workspace
+          cd workspace
+          echo "workspace-folder=$(pwd)" >> "$GITHUB_OUTPUT"
+          git config --global user.name "azwhikaru"
+          git config --global user.email "azwhikaru+37921907@github.com"
+          repo init --depth=1 --repo-branch=repo-1 -u "${{ env.MANIFEST_URL }}" -b "${{ env.MANIFEST_BRANCH }}"
 
-    - name: Clone common tree
-      if: |
-        env.COMMON_TREE_URL != null
-        && env.COMMON_PATH != null
-      shell: bash
-      run: |
-        git clone ${{ env.COMMON_TREE_URL }} -b ${{ env.DEVICE_TREE_BRANCH }} ./${{ env.COMMON_PATH }}
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+      - name: Repo Sync
+        shell: bash
+        working-directory: workspace
+        run: |
+          set -euxo pipefail
+          repo sync -j"$(nproc --all)" --force-sync --no-clone-bundle --no-tags --prune
 
-    - name: Remove unused language files
-      shell: bash
-      run: |
-        cd workspace
-        find bootable/recovery/gui/theme/common/languages/ \
-        -name "*.xml" ! -name "ja.xml" ! -name "en.xml" -delete
+      - name: Move files to workspace
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p "workspace/${{ env.DEVICE_PATH }}"
+          find . -maxdepth 1 -mindepth 1 \
+            ! -name workspace \
+            ! -name .git \
+            -exec mv -t "workspace/${{ env.DEVICE_PATH }}" -- {} +
 
-    - name: Fix GCC10+ fno-common host build failure
-      shell: bash
-      run: |
-        echo 'HOST_GLOBAL_CFLAGS += -fcommon' >> build/core/combo/HOST_linux-x86.mk
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-
-    - name: Patch checkpolicy.h to fix GCC10+ multiple definition error
-      shell: bash
-      run: |
-        sed -i 's/^te_assert_t \*te_assertions;/extern te_assert_t *te_assertions;/' external/checkpolicy/checkpolicy.h
-        echo 'te_assert_t *te_assertions;' >> external/checkpolicy/checkpolicy.c
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-
-    - name: Fix libselinux static libpcre linkage per module block
-      shell: bash
-      run: |
-        python3 - <<'PYEOF'
-        import re
-
-        path = 'external/libselinux/Android.mk'
-        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
-            content = f.read()
-
-        marker = 'include $(CLEAR_VARS)'
-        parts = content.split(marker)
-        patched_blocks = 0
-        for i in range(1, len(parts)):
-            block = parts[i]
-            if re.search(r'(?m)^LOCAL_WHOLE_STATIC_LIBRARIES\s*(:=|\+=)\s*libpcre\s*$', block):
-                block = re.sub(r'(?m)^LOCAL_WHOLE_STATIC_LIBRARIES\s*(:=|\+=)\s*libpcre\s*\n', '', block)
-                block, count = re.subn(
-                    r'(?m)^include \$\(BUILD_(HOST_)?(STATIC|SHARED)_LIBRARY\)\s*$',
-                    lambda m: 'LOCAL_STATIC_LIBRARIES += libpcre\nLOCAL_EXPORT_STATIC_LIBRARIES += libpcre\n' + m.group(0),
-                    block,
-                    count=1,
-                )
-                block, count2 = re.subn(
-                    r'(?m)^include \$\(BUILD_HOST_EXECUTABLE\)\s*$',
-                    lambda m: 'LOCAL_STATIC_LIBRARIES += libpcre\n' + m.group(0),
-                    block,
-                    count=(0 if count else 1),
-                )
-                if count or count2:
-                    patched_blocks += 1
-                parts[i] = block
-
-        content = marker.join(parts)
-        with open(path, 'w', encoding='utf-8') as f:
-            f.write(content)
-        print('libselinux Android.mk: patched blocks =', patched_blocks)
-
-        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
-            print(f.read())
-        PYEOF
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-
-    - name: Fix checkseapp Android.mk to disable stringop-truncation warnings
-      shell: bash
-      run: |
-        cd external/sepolicy/tools
-        if grep -q '^LOCAL_CFLAGS' Android.mk; then
-          sed -i 's/^LOCAL_CFLAGS.*/& -Wno-error=stringop-truncation -Wno-stringop-truncation/' Android.mk
-        else
-          echo 'LOCAL_CFLAGS := -Wno-error=stringop-truncation -Wno-stringop-truncation' >> Android.mk
-        fi
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-
-    - name: Fix checkfc to link libpcre explicitly
-      shell: bash
-      run: |
-        cd external/sepolicy/tools
-        if grep -A10 'LOCAL_MODULE := checkfc' Android.mk | grep -q 'LOCAL_STATIC_LIBRARIES'; then
-          sed -i '/LOCAL_MODULE := checkfc/,/LOCAL_STATIC_LIBRARIES/ s/\(LOCAL_STATIC_LIBRARIES.*\)/\1 libpcre/' Android.mk
-        else
-          sed -i '/LOCAL_MODULE := checkfc/ a LOCAL_STATIC_LIBRARIES := libpcre' Android.mk
-        fi
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-
-    - name: Fix init Android.mk libpcre linkage safely
-      shell: bash
-      run: |
-        python3 - <<'PYEOF'
-        import re
-
-        path = 'system/core/init/Android.mk'
-        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
-            content = f.read()
-
-        if 'libpcre' in content:
-            print('init Android.mk already references libpcre, skipping')
-        else:
-            new_content, count = re.subn(
-                r'(?m)^include \$\(BUILD_EXECUTABLE\)\s*$',
-                lambda m: 'LOCAL_STATIC_LIBRARIES += libpcre\n' + m.group(0),
-                content,
-                count=1,
-            )
-            if count == 0:
-                raise SystemExit('init Android.mk: include $(BUILD_EXECUTABLE) not found, manual review required')
-            with open(path, 'w', encoding='utf-8') as f:
-                f.write(new_content)
-            print('init Android.mk patched')
-
-        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
-            print(f.read())
-        PYEOF
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-
-    - name: Ensure libpcre is linked wherever libselinux is statically linked
-      shell: bash
-      run: |
-        FILES=$(grep -rl --include=Android.mk 'libselinux' . 2>/dev/null | xargs grep -l 'LOCAL_STATIC_LIBRARIES' 2>/dev/null || true)
-        if [ -z "$FILES" ]; then
-          echo "no candidate Android.mk found"
-          exit 0
-        fi
-        python3 - "$FILES" <<'PYEOF'
-        import re, sys
-
-        files = sys.argv[1].split('\n')
-        marker = 'include $(CLEAR_VARS)'
-        patched = []
-        for path in files:
-            if not path:
-                continue
-            with open(path, 'r', encoding='utf-8', errors='ignore') as f:
-                content = f.read()
-            parts = content.split(marker)
-            changed = False
-            for i in range(1, len(parts)):
-                block = parts[i]
-                m = re.search(r'(?m)^(LOCAL_STATIC_LIBRARIES\s*(:=|\+=)\s*)((?:[^\n\\]|\\\n)*)$', block)
-                if not m:
-                    continue
-                value = m.group(3)
-                if 'libselinux' in value and 'libpcre' not in value:
-                    new_value = value.rstrip()
-                    if new_value.endswith('\\'):
-                        new_value = new_value[:-1].rstrip() + ' libpcre \\'
-                    else:
-                        new_value = new_value + ' libpcre'
-                    new_line = m.group(1) + new_value
-                    block = block[:m.start()] + new_line + block[m.end():]
-                    parts[i] = block
-                    changed = True
-            if changed:
-                content = marker.join(parts)
-                with open(path, 'w', encoding='utf-8') as f:
-                    f.write(content)
-                patched.append(path)
-        print('libpcre linkage ensured in:', patched)
-        PYEOF
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-
-
-    - name: Patch legacy nullptr usage in recovery
-      shell: bash
-      run: |
-        if grep -q 'nullptr' bootable/recovery/partition.cpp; then
+      - name: Patch legacy nullptr build error
+        shell: bash
+        working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+        run: |
+          set -euxo pipefail
           sed -i 's/nullptr/NULL/g' bootable/recovery/partition.cpp
-        fi
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-    - name: Building recovery
-      shell: bash
-      run: |
-        source build/envsetup.sh
-        WITH_DEBUG_SYMBOLS=false
-        export ALLOW_MISSING_DEPENDENCIES=true
-        lunch ${{ env.MAKEFILE_NAME }}-userdebug
-        make ${{ env.BUILD_TARGET }}image -j2
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
 
-    - name: Upload to Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: | 
-          workspace/out/target/product/${{ env.DEVICE_NAME }}/${{ env.BUILD_TARGET }}.img
-          workspace/out/target/product/${{ env.DEVICE_NAME }}/*.zip
-          workspace/out/target/product/${{ env.DEVICE_NAME }}/*vendor*.img
-        name: ${{ env.DEVICE_NAME }}-${{ github.run_id }}
-        tag_name: ${{ github.run_id }}
-        body: |
-          Manifest: ${{ env.MANIFEST_BRANCH }}
-          Device: ${{ env.DEVICE_NAME }}
-          Target: ${{ env.BUILD_TARGET }}.img
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build recovery binaries
+        shell: bash
+        working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+        run: |
+          set -euxo pipefail
+          set +u
+          source build/envsetup.sh
+          lunch "${{ env.MAKEFILE_NAME }}-eng"
+          set -u
+          export ALLOW_MISSING_DEPENDENCIES=true
+          make "${{ env.BUILD_TARGET }}" -j2
+
+      - name: Remove healthd before packing image
+        shell: bash
+        working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+        run: |
+          set -euxo pipefail
+          PRODUCT_OUT="out/target/product/${{ env.DEVICE_NAME }}"
+
+          for target in \
+            "$PRODUCT_OUT/root/sbin/healthd" \
+            "$PRODUCT_OUT/recovery/root/sbin/healthd" \
+            "$PRODUCT_OUT/ramdisk/sbin/healthd"
+          do
+            if [ -e "$target" ]; then
+              rm -f "$target"
+              echo "Removed: $target"
+            fi
+          done
+
+      - name: Pack recovery image
+        shell: bash
+        working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+        run: |
+          set -euxo pipefail
+          set +u
+          source build/envsetup.sh
+          lunch "${{ env.MAKEFILE_NAME }}-eng"
+          set -u
+          export ALLOW_MISSING_DEPENDENCIES=true
+          make "${{ env.BUILD_TARGET }}image" -j2
+
+      - name: Upload to Release
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python2 - <<'PY'
+          from __future__ import print_function
+          import glob
+          import json
+          import os
+          import sys
+          import urllib2
+          import urllib
+          from urlparse import urlparse, parse_qs
+
+          repo = os.environ["GITHUB_REPOSITORY"]
+          token = os.environ["GITHUB_TOKEN"]
+          run_id = os.environ["GITHUB_RUN_ID"]
+          device = os.environ["DEVICE_NAME"]
+          target = os.environ["BUILD_TARGET"]
+          body = "Manifest: {0}\nDevice: {1}\nTarget: {2}.img\n".format(
+              os.environ["MANIFEST_BRANCH"], device, target
+          )
+
+          patterns = [
+              "workspace/out/target/product/{0}/{1}.img".format(device, target),
+              "workspace/out/target/product/{0}/*.zip".format(device),
+              "workspace/out/target/product/{0}/*vendor*.img".format(device),
+          ]
+          assets = []
+          for pattern in patterns:
+              assets.extend(sorted(glob.glob(pattern)))
+          assets = [p for p in assets if os.path.isfile(p)]
+          if not assets:
+              sys.exit("No release assets found")
+
+          headers = {
+              "Authorization": "Bearer {0}".format(token),
+              "Accept": "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28",
+              "User-Agent": "python",
+          }
+
+          def request(url, method="GET", data=None, extra_headers=None):
+              hdrs = dict(headers)
+              if extra_headers:
+                  hdrs.update(extra_headers)
+              req = urllib2.Request(url, data=data, headers=hdrs)
+              req.get_method = lambda: method
+              return urllib2.urlopen(req)
+
+          release_api = "https://api.github.com/repos/{0}/releases".format(repo)
+          payload = json.dumps({
+              "tag_name": run_id,
+              "name": "{0}-{1}".format(device, run_id),
+              "body": body,
+              "draft": False,
+              "prerelease": False,
+          }).encode("utf-8")
+
+          try:
+              resp = request(release_api, method="POST", data=payload,
+                             extra_headers={"Content-Type": "application/json"})
+              release = json.loads(resp.read())
+          except urllib2.HTTPError as e:
+              if e.code == 422:
+                  resp = request("{0}/tags/{1}".format(release_api, run_id))
+                  release = json.loads(resp.read())
+              else:
+                  raise
+
+          upload_url = release["upload_url"].split("{", 1)[0]
+          for asset in assets:
+              name = os.path.basename(asset)
+              url = "{0}?{1}".format(upload_url, urllib.urlencode({"name": name}))
+              with open(asset, "rb") as f:
+                  data = f.read()
+              resp = request(url, method="POST", data=data, extra_headers={
+                  "Content-Type": "application/octet-stream",
+                  "Content-Length": str(len(data)),
+              })
+              print("uploaded {0}: {1}".format(name, resp.getcode()))
+          print("release complete")
+          PY
