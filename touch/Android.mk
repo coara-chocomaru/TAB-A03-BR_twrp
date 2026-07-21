@@ -20,7 +20,8 @@ LOCAL_CFLAGS += \
 
 LOCAL_LDFLAGS += \
     -Wl,--gc-sections \
-    -Wl,-s
+    -Wl,-s \
+    --dynamic-linker=/sbin/linker64
 LOCAL_STRIP_MODULE := true
 LOCAL_STATIC_LIBRARIES += libc
 
