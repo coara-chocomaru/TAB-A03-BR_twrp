@@ -5,3 +5,4 @@ TARGET_IS_TABLET := true
 TARGET_NO_TELEPHONY := true
 TARGET_HAS_NO_RADIO := true
 LOCAL_PATH := device/sts/a03br
+PRODUCT_PACKAGES += touchyfix
