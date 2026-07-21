@@ -88,23 +88,23 @@ BOARD_KERNEL_TAGS_OFFSET := 0x00000100
 BOARD_KERNEL_OFFSET := 0x00008000
 BOARD_SECOND_OFFSET := 0x00f00000
 
-BOARD_MKBOOTIMG_ARGS := 
---base $(BOARD_KERNEL_BASE) 
---pagesize $(BOARD_KERNEL_PAGESIZE) 
---kernel_offset $(BOARD_KERNEL_OFFSET) 
---ramdisk_offset $(BOARD_RAMDISK_OFFSET) 
---tags_offset $(BOARD_KERNEL_TAGS_OFFSET) 
---second_offset $(BOARD_SECOND_OFFSET) 
---cmdline "$(BOARD_KERNEL_CMDLINE)"
+BOARD_MKBOOTIMG_ARGS := \
+     --base $(BOARD_KERNEL_BASE) \
+     --pagesize $(BOARD_KERNEL_PAGESIZE) \
+     --kernel_offset $(BOARD_KERNEL_OFFSET) \
+     --ramdisk_offset $(BOARD_RAMDISK_OFFSET) \
+     --tags_offset $(BOARD_KERNEL_TAGS_OFFSET) \
+     --second_offset $(BOARD_SECOND_OFFSET) \
+     --cmdline "$(BOARD_KERNEL_CMDLINE)"
 
 # Kernel - prebuilt
-
 TARGET_FORCE_PREBUILT_KERNEL := true
 ifeq ($(TARGET_FORCE_PREBUILT_KERNEL),true)
 TARGET_PREBUILT_KERNEL := $(DEVICE_PATH)/prebuilt/kernel
-PRODUCT_COPY_FILES += 
-$(DEVICE_PATH)/prebuilt/kernel:kernel
+PRODUCT_COPY_FILES += \
+    $(DEVICE_PATH)/prebuilt/kernel:kernel
 endif
+
 
 # Recovery
 
