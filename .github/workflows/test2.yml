@@ -148,7 +148,7 @@ jobs:
               match($0, /^[ \t]*/)
               indent = substr($0, RSTART, RLENGTH)
               print indent "$(hide) rm -f $(TARGET_RECOVERY_ROOT_OUT)/sbin/healthd"
-              print indent "$(hide) find $(TARGET_RECOVERY_ROOT_OUT)/twres/language -type f ! -name en.xml -delete"
+              print indent "$(hide) test -d $(TARGET_RECOVERY_ROOT_OUT)/twres/languages && find $(TARGET_RECOVERY_ROOT_OUT)/twres/languages -type f ! -name en.xml -delete || true"
               print indent "$(hide) rm -f $(TARGET_RECOVERY_ROOT_OUT)/sbin/*.apk"
               done = 1
             }
@@ -163,7 +163,7 @@ jobs:
           ' build/core/Makefile > build/core/Makefile.new
           mv build/core/Makefile.new build/core/Makefile
           grep -n 'rm -f \$(TARGET_RECOVERY_ROOT_OUT)/sbin/healthd' build/core/Makefile
-          grep -n 'find \$(TARGET_RECOVERY_ROOT_OUT)/twres/language' build/core/Makefile
+          grep -n 'test -d \$(TARGET_RECOVERY_ROOT_OUT)/twres/languages' build/core/Makefile
           grep -n 'rm -f \$(TARGET_RECOVERY_ROOT_OUT)/sbin/\*.apk' build/core/Makefile
 
       - name: Building recovery
