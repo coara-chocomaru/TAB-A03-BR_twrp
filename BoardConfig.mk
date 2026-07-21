@@ -130,7 +130,7 @@ SELINUX_IGNORE_NEVERALLOWS := true
 BOARD_HAS_NO_SELECT_BUTTON := true
 
 TW_BRIGHTNESS_PATH := /sys/devices/platform/panel_vx5b1d.19/backlight/lcd-bl/brightness
-
+TW_TARGET_USES_QCOM_BSP := false
 TW_INCLUDE_CRYPTO := false
 TW_USE_TOOLBOX := false
 TW_THEME := landscape_mdpi
