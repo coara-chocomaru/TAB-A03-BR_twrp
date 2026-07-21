@@ -137,37 +137,32 @@ jobs:
           set -euxo pipefail
           sed -i 's/nullptr/NULL/g' bootable/recovery/partition.cpp
 
-      - name: Build recovery binaries
+      - name: Exclude sbin/healthd from recovery ramdisk before packing
         shell: bash
         working-directory: ${{ steps.pwd.outputs.workspace-folder }}
         run: |
           set -euxo pipefail
-          set +u
-          source build/envsetup.sh
-          lunch "${{ env.MAKEFILE_NAME }}-eng"
-          set -u
-          export ALLOW_MISSING_DEPENDENCIES=true
-          make "${{ env.BUILD_TARGET }}" -j2
+          awk '
+          {
+            if ($0 ~ /\$\(MKBOOTFS\) \$\(TARGET_RECOVERY_ROOT_OUT\)/ && !done) {
+              match($0, /^[ \t]*/)
+              indent = substr($0, RSTART, RLENGTH)
+              print indent "$(hide) rm -f $(TARGET_RECOVERY_ROOT_OUT)/sbin/healthd"
+              done = 1
+            }
+            print
+          }
+          END {
+            if (!done) {
+              print "ERROR: $(MKBOOTFS) $(TARGET_RECOVERY_ROOT_OUT) line not found in build/core/Makefile" > "/dev/stderr"
+              exit 1
+            }
+          }
+          ' build/core/Makefile > build/core/Makefile.new
+          mv build/core/Makefile.new build/core/Makefile
+          grep -n 'rm -f \$(TARGET_RECOVERY_ROOT_OUT)/sbin/healthd' build/core/Makefile
 
-      - name: Remove healthd before packing image
-        shell: bash
-        working-directory: ${{ steps.pwd.outputs.workspace-folder }}
-        run: |
-          set -euxo pipefail
-          PRODUCT_OUT="out/target/product/${{ env.DEVICE_NAME }}"
-
-          for target in \
-            "$PRODUCT_OUT/root/sbin/healthd" \
-            "$PRODUCT_OUT/recovery/root/sbin/healthd" \
-            "$PRODUCT_OUT/ramdisk/sbin/healthd"
-          do
-            if [ -e "$target" ]; then
-              rm -f "$target"
-              echo "Removed: $target"
-            fi
-          done
-
-      - name: Pack recovery image
+      - name: Building recovery
         shell: bash
         working-directory: ${{ steps.pwd.outputs.workspace-folder }}
         run: |
@@ -212,6 +207,7 @@ jobs:
           assets = []
           for pattern in patterns:
               assets.extend(sorted(glob.glob(pattern)))
+          # filter only files
           assets = [p for p in assets if os.path.isfile(p)]
           if not assets:
               sys.exit("No release assets found")
@@ -246,6 +242,7 @@ jobs:
               release = json.loads(resp.read())
           except urllib2.HTTPError as e:
               if e.code == 422:
+                  # release already exists, fetch it
                   resp = request("{0}/tags/{1}".format(release_api, run_id))
                   release = json.loads(resp.read())
               else:
