@@ -1,124 +1,166 @@
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <fcntl.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <sys/ioctl.h>
 #include <linux/input.h>
 #include <linux/uinput.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
-static inline int clampi(int v, int lo, int hi) {
-    if (v < lo) return lo;
-    if (v > hi) return hi;
-    return v;
-}
-
-static int write_full(int fd, const void *buf, size_t len) {
-    const unsigned char *p = (const unsigned char *)buf;
-    while (len) {
-        ssize_t w = write(fd, p, len);
-        if (w < 0) {
-            if (errno == EINTR) continue;
-            return -1;
-        }
-        p += (size_t)w;
-        len -= (size_t)w;
-    }
-    return 0;
-}
-
-static int setup_uinput(int fu, const char *devname, const struct input_absinfo *ax, const struct input_absinfo *ay) {
-    if (ioctl(fu, UI_SET_EVBIT, EV_SYN) < 0) return -1;
-    if (ioctl(fu, UI_SET_EVBIT, EV_KEY) < 0) return -1;
-    if (ioctl(fu, UI_SET_EVBIT, EV_ABS) < 0) return -1;
-
-    if (ioctl(fu, UI_SET_KEYBIT, BTN_TOUCH) < 0) return -1;
-
-    if (ioctl(fu, UI_SET_ABSBIT, ABS_X) < 0) return -1;
-    if (ioctl(fu, UI_SET_ABSBIT, ABS_Y) < 0) return -1;
-
-    struct uinput_user_dev uidev;
-    memset(&uidev, 0, sizeof(uidev));
-
-    snprintf(uidev.name, sizeof(uidev.name), "touchyfix-%s", devname);
-    uidev.id.bustype = BUS_VIRTUAL;
-    uidev.id.vendor = 0x1234;
-    uidev.id.product = 0x5678;
-    uidev.id.version = 1;
-
-    uidev.absmin[ABS_X] = ax->minimum;
-    uidev.absmax[ABS_X] = ax->maximum;
-    uidev.absmin[ABS_Y] = ay->minimum;
-    uidev.absmax[ABS_Y] = ay->maximum;
-
-    if (write_full(fu, &uidev, sizeof(uidev)) < 0) return -1;
-    if (ioctl(fu, UI_DEV_CREATE) < 0) return -1;
-
-    return 0;
-}
+#define clampi(v, lo, hi) ((v) < (lo) ? (lo) : ((v) > (hi) ? (hi) : (v)))
+#define BUF_SIZE 64
 
 int main(int argc, char **argv) {
-    if (argc < 3) {
+    if (argc < 3) return 2;
+    const char *devpath = argv[1];
+    const char *mode = argv[2];
+    int fd_in = open(devpath, O_RDONLY);
+    if (fd_in < 0) return 3;
+
+    int use_affine = 0;
+    int use_delta = 0;
+    long post_off = 0;
+    int out_h = 800;
+    int pad_top = 10;
+    int pad_bottom = 10;
+    int delta = 0;
+    int raw_min = 0, raw_max = 65535;
+
+    if (strcmp(mode, "delta") == 0) {
+        if (argc < 4) { close(fd_in); return 2; }
+        delta = atoi(argv[3]);
+        use_delta = 1;
+    } else if (strcmp(mode, "affine_auto") == 0) {
+        if (argc < 6) { close(fd_in); return 2; }
+        out_h = atoi(argv[3]);
+        pad_top = atoi(argv[4]);
+        pad_bottom = atoi(argv[5]);
+        if (argc >= 7) post_off = atol(argv[6]);
+        struct input_absinfo absy;
+        if (ioctl(fd_in, EVIOCGABS(ABS_Y), &absy) < 0) { close(fd_in); return 4; }
+        raw_min = absy.minimum;
+        raw_max = absy.maximum;
+        use_affine = 1;
+    } else if (strcmp(mode, "affine_fixed") == 0) {
+        if (argc < 8) { close(fd_in); return 2; }
+        out_h = atoi(argv[3]);
+        pad_top = atoi(argv[4]);
+        pad_bottom = atoi(argv[5]);
+        raw_min = atoi(argv[6]);
+        raw_max = atoi(argv[7]);
+        if (argc >= 9) post_off = atol(argv[8]);
+        use_affine = 1;
+    } else {
+        close(fd_in);
         return 2;
     }
 
-    const char *devpath = argv[1];
-    int y_delta = atoi(argv[2]);
+    struct input_absinfo abs_x, abs_y;
+    int have_x = (ioctl(fd_in, EVIOCGABS(ABS_X), &abs_x) == 0);
+    int have_y = (ioctl(fd_in, EVIOCGABS(ABS_Y), &abs_y) == 0);
+    int x_min = have_x ? abs_x.minimum : 0;
+    int x_max = have_x ? abs_x.maximum : 1280;
+    int y_min = have_y ? abs_y.minimum : 0;
+    int y_max = have_y ? abs_y.maximum : 65535;
 
-    int fd_in = open(devpath, O_RDONLY);
-    if (fd_in < 0) {
-        return 3;
+    if (use_affine) {
+        if (raw_max <= raw_min) { close(fd_in); return 5; }
     }
 
-    struct input_absinfo ax, ay;
-    if (ioctl(fd_in, EVIOCGABS(ABS_X), &ax) < 0) {
-        close(fd_in);
-        return 4;
-    }
-    if (ioctl(fd_in, EVIOCGABS(ABS_Y), &ay) < 0) {
-        close(fd_in);
-        return 4;
-    }
-
-    if (ioctl(fd_in, EVIOCGRAB, (void *)1) < 0) {
+    if (ioctl(fd_in, EVIOCGRAB, (void*)1) < 0) {
         close(fd_in);
         return 5;
     }
 
     int fd_u = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
     if (fd_u < 0) {
-        ioctl(fd_in, EVIOCGRAB, (void *)0);
+        ioctl(fd_in, EVIOCGRAB, (void*)0);
         close(fd_in);
         return 6;
     }
 
-    if (setup_uinput(fd_u, devpath, &ax, &ay) < 0) {
-        ioctl(fd_u, UI_DEV_DESTROY);
+    ioctl(fd_u, UI_SET_EVBIT, EV_SYN);
+    ioctl(fd_u, UI_SET_EVBIT, EV_KEY);
+    ioctl(fd_u, UI_SET_EVBIT, EV_ABS);
+    ioctl(fd_u, UI_SET_KEYBIT, BTN_TOUCH);
+    ioctl(fd_u, UI_SET_ABSBIT, ABS_X);
+    ioctl(fd_u, UI_SET_ABSBIT, ABS_Y);
+
+    struct uinput_user_dev uidev;
+    memset(&uidev, 0, sizeof(uidev));
+    snprintf(uidev.name, sizeof(uidev.name), "calibrated-combined-%s", devpath);
+    uidev.id.bustype = BUS_VIRTUAL;
+    uidev.id.vendor = 0x1234;
+    uidev.id.product = 0x5678;
+    uidev.absmin[ABS_X] = x_min;
+    uidev.absmax[ABS_X] = x_max;
+    if (use_affine) {
+        uidev.absmin[ABS_Y] = 0;
+        uidev.absmax[ABS_Y] = out_h;
+    } else {
+        uidev.absmin[ABS_Y] = y_min;
+        uidev.absmax[ABS_Y] = y_max;
+    }
+
+    if (write(fd_u, &uidev, sizeof(uidev)) < 0) {
+        ioctl(fd_in, EVIOCGRAB, (void*)0);
         close(fd_u);
-        ioctl(fd_in, EVIOCGRAB, (void *)0);
+        close(fd_in);
+        return 7;
+    }
+    if (ioctl(fd_u, UI_DEV_CREATE) < 0) {
+        ioctl(fd_in, EVIOCGRAB, (void*)0);
+        close(fd_u);
         close(fd_in);
         return 7;
     }
 
-    struct input_event ev;
-    while (read(fd_in, &ev, sizeof(ev)) == (ssize_t)sizeof(ev)) {
-        if (ev.type == EV_ABS) {
-            if (ev.code == ABS_Y) {
-                ev.value = clampi(ev.value + y_delta, ay.minimum, ay.maximum);
-            } else if (ev.code == ABS_X) {
-                ev.value = clampi(ev.value, ax.minimum, ax.maximum);
+    long a_num = 1;
+    long a_den = 1;
+    long b = 0;
+    if (use_affine) {
+        a_num = (out_h - pad_top - pad_bottom);
+        a_den = (raw_max - raw_min);
+        b = pad_top - (a_num * raw_min) / a_den;
+    }
+
+    struct input_event buf[BUF_SIZE];
+    ssize_t r;
+    while (1) {
+        r = read(fd_in, buf, sizeof(buf));
+        if (r <= 0) break;
+        if (r % sizeof(struct input_event) != 0) continue;
+        size_t nev = r / sizeof(struct input_event);
+        for (size_t i = 0; i < nev; i++) {
+            struct input_event *ev = &buf[i];
+            if (ev->type == EV_ABS) {
+                if (ev->code == ABS_Y) {
+                    if (use_affine) {
+                        long raw = ev->value;
+                        long scaled = (a_num * raw) / a_den + b + post_off;
+                        int v = (int)scaled;
+                        v = clampi(v, 0, out_h);
+                        ev->value = v;
+                    } else if (use_delta) {
+                        int val = ev->value + delta;
+                        val = clampi(val, y_min, y_max);
+                        ev->value = val;
+                    }
+                } else if (ev->code == ABS_X) {
+                    int vx = ev->value;
+                    vx = clampi(vx, x_min, x_max);
+                    ev->value = vx;
+                }
             }
         }
-
-        if (write_full(fd_u, &ev, sizeof(ev)) < 0) {
-            break;
-        }
+        write(fd_u, buf, r);
     }
 
     ioctl(fd_u, UI_DEV_DESTROY);
-    ioctl(fd_in, EVIOCGRAB, (void *)0);
+    ioctl(fd_in, EVIOCGRAB, (void*)0);
     close(fd_u);
     close(fd_in);
     return 0;
