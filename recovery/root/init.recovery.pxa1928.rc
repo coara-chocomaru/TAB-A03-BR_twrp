@@ -4,7 +4,7 @@ on early-init
 on init
     start touchyfix
 
-service touchyfix /sbin/touchyfix /dev/input/event1 -13
+service touchyfix /sbin/touchyfix /dev/input/event1 affine_auto 800 13 13
     class core
     user root
     group root
