@@ -1,11 +1,10 @@
 on early-init
     setenforce 0
-    export PS1='root@A03BR:/\$ '
 
 on init
     start touchyfix
 
-service touchyfix /sbin/touchyfix /dev/input/event1 affine_auto 800 13 13
+service touchyfix /sbin/touchyfix /dev/input/event1 affine_auto 800 -33 -33
     class core
     user root
     group root
