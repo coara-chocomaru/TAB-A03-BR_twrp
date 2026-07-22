@@ -3,7 +3,7 @@ on early-init
 
 on init
     start touchyfix
-    export PS1='root@A03BR:/\$'
+    export PS1 root@A03BR:/#
 
 service touchyfix /sbin/touchyfix /dev/input/event1 affine_auto 800 -33 -33
     class core
