@@ -1,0 +1,2 @@
+export PS1="root@A03BR:$PWD# "
+cd() { command cd "$@" && export PS1="root@A03BR:$PWD# "; }
